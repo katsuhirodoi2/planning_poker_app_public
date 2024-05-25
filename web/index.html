@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="planning_poker_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>プランニングポーカー</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script>
+    // The value below is injected by flutter build, do not touch.
+    // const serviceWorkerVersion = "{{flutter_service_worker_version}}";
+  </script>
+  <!-- This script adds the flutter initialization JS code -->
+  <script src="flutter.js" defer></script>
+
+  <!-- Add this CSS inside the head tag -->
+  <style>
+    #loader {
+      position: fixed;
+      display: flex;
+      flex-direction: column; /* Add this line */
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      background-color: #fef8ff;
+      z-index: 9999;
+    }
+
+    .spinner {
+      border: 4px solid transparent;
+      border-top: 4px solid #7362ac;
+      border-right: 4px solid transparent;
+      border-bottom: 4px solid #7362ac;
+      border-left: 4px solid #7362ac;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      animation: spin 1s linear infinite;
+    }
+
+    #loader p {
+      margin-top: 16px;
+      font-size: 16px;
+      font-family: "Readex Pro";
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Add this div inside the body tag -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+  </div>
+
+  <script>
+    window.addEventListener('load', function(ev) {
+      {{flutter_js}}
+      {{flutter_build_config}}
+      var serviceWorkerVersion = JSON.parse('{{flutter_service_worker_version}}');
+      // Download main.dart.js
+      _flutter.loader.load({
+        serviceWorker: {
+          serviceWorkerVersion: serviceWorkerVersion,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
+  <!-- Add this script just before the closing </body> tag -->
+  <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-analytics.js"></script>
+
+  <script>
+    // Your web app's Firebase configuration
+    var firebaseConfig = {
+      apiKey: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        authDomain: "XXXXXXXXXXXXXXXXXXX.firebaseapp.com",
+        projectId: "XXXXXXXXXXXXXXXXXXX",
+        storageBucket: "XXXXXXXXXXXXXXXXXXX.appspot.com",
+        messagingSenderId: "XXXXXXXXXXXX",
+        appId: "1:XXXXXXXXXXXX:web:XXXXXXXXXXXXXXXXXXXX",
+        measurementId: "G-XXXXXXXXXX"
+    };
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    firebase.analytics();
+  </script>
+
+  <!-- Add this script just before the closing </body> tag -->
+  <script>
+    window.addEventListener('flutter-first-frame', function() {
+      var loader = document.getElementById('loader');
+      if (loader) {
+        loader.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
