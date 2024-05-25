@@ -23,6 +23,10 @@
 
 ### Firebaseプロジェクトを作成する
 
+本アプリケーション用のFirebaseプロジェクトを作成する
+
+※作成方法はFirebaseのドキュメント等を参照ください。
+
 #### FirebaseにAndroidアプリを登録する
 
 FirebaseのAndroidアプリ登録後、FirebaseのAndroidアプリの情報表示画面にある「SDKの手順を確認」するを開く
@@ -79,6 +83,7 @@ planning_poker_app/lib/main.dart
 
 の以下コードのXXXXXXXの部分をFirebaseのウェブアプリの情報表示画面に表示されている同様の情報と同じ値に書き換える。
 
+```
   await Firebase.initializeApp(
     options: const FirebaseOptions(
         apiKey: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -89,7 +94,7 @@ planning_poker_app/lib/main.dart
         appId: "1:XXXXXXXXXXXX:web:XXXXXXXXXXXXXXXXXXXX",
         measurementId: "G-XXXXXXXXXX"),
   );
-
+```
 
 
 ### Firebase StorageにCORSの設定をする
