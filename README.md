@@ -151,4 +151,4 @@ XcodeのメニューからProduct -> Archiveを選択する。これにより、
 
 Organizerウィンドウで作成したアーカイブを選択し、Distribute Appボタンをクリックする。次に、App Store Connectを選択し、アップロードプロセスを続行する。
 
-4. 以降の処理の記述は省略（Apple Store Connectでの操作になる）
+4. 以降の処理の記述は省略（App Store Connectでの操作になる）
