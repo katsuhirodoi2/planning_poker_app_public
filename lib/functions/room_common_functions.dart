@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // 部屋番号の開始値、終了値、総数
 const ROOM_START_NUM = 100;
@@ -36,4 +37,21 @@ Future<bool> checkRoomExists(String roomID) async {
 
   // 部屋が存在し、最後の活動からinactivityReleaseMinutes未満の場合
   return true;
+}
+
+Future<bool> checkBlockUser(String roomID) async {
+  final firestore = FirebaseFirestore.instance;
+  var roomSnapshot = await firestore.collection('rooms').doc(roomID).get();
+
+  String forUserBlockString = roomSnapshot.data()?['forUserBlockString'] ?? '';
+
+  final prefs = await SharedPreferences.getInstance();
+  String prefsForUserBlockString = prefs.getString('forUserBlockString') ?? '';
+
+  if (prefsForUserBlockString.isNotEmpty &&
+      prefsForUserBlockString == forUserBlockString) {
+    return true;
+  } else {
+    return false;
+  }
 }

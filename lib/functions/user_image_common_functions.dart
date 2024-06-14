@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:planning_poker_app/functions/common_functions.dart';
 
 Future<String?> uploadImageAndSaveUrl(
     String roomID, Uint8List? imageData) async {
@@ -14,7 +15,7 @@ Future<String?> uploadImageAndSaveUrl(
 
   String fileName = DateTime.now().millisecondsSinceEpoch.toString() +
       '_' +
-      generateRandomNumberString(6);
+      generateRandomString(6, true);
   ;
   FirebaseStorage storage = FirebaseStorage.instance;
   Reference ref = storage.ref().child("public/images/$roomID/$fileName");
@@ -34,15 +35,15 @@ Future<String?> uploadImageAndSaveUrl(
 }
 
 // ランダムな数字を生成します
-String generateRandomNumberString(int length) {
-  var rand = new Random();
-  var codeUnits = List.generate(
-    length,
-    (index) => rand.nextInt(10), // 0から9までのランダムな数字を生成
-  );
+// String generateRandomNumberString(int length) {
+//   var rand = new Random();
+//   var codeUnits = List.generate(
+//     length,
+//     (index) => rand.nextInt(10), // 0から9までのランダムな数字を生成
+//   );
 
-  return codeUnits.join();
-}
+//   return codeUnits.join();
+// }
 
 // SharedPreferencesに_imageDataを保存します
 Future<void> saveUserImage(Uint8List? imageData) async {

@@ -5,8 +5,10 @@ import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:planning_poker_app/models/card_counts_model.dart';
 import 'package:planning_poker_app/models/is_result_visible_model.dart';
 import 'package:planning_poker_app/models/selected_cards_model.dart';
-import 'dart:html' as html;
+import 'package:planning_poker_app/models/theme_provider.dart';
+import 'package:planning_poker_app/platform_functions_export.dart';
 import 'package:planning_poker_app/routes/my_router_delegate.dart';
+import 'package:planning_poker_app/screens/name_change_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:planning_poker_app/functions/user_image_common_functions.dart';
@@ -14,6 +16,7 @@ import 'dart:math';
 import 'package:planning_poker_app/screens/image_change_bottom_sheet.dart';
 import 'package:planning_poker_app/functions/room_common_functions.dart';
 import 'dart:async';
+import 'package:planning_poker_app/screens/report_user_bottom_sheet.dart';
 
 class RoomScreen extends StatefulWidget {
   final int roomID;
@@ -26,7 +29,7 @@ class RoomScreen extends StatefulWidget {
 
 class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
   late Future<List<Object>> initFuture;
-  Future<String>? exiterFuture;
+  Future<List<Object>>? exiterFuture;
 
   // Firestoreに接続するためのインスタンスを作成
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -36,19 +39,56 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ブラウザのタイトルを設定
-    html.document.title = '部屋番号 ${widget.roomID} - プランニングポーカー';
+    PlatformFunctions().setTitle('部屋番号 ${widget.roomID} - プランニングポーカー');
 
     double drawAreaBorderWidthSum = 0;
     double drawInnerAreaBorderWidthSum = 0;
     double marginBorderWidthSum = 0;
     double screenWidth = MediaQuery.of(context).size.width;
+
     double leftAreaWidth = 300;
     double rightAreaWidth = 600;
-    double idealDrawAreaWidth = 16 +
+    const double SMART_PHONE_SMALL_SCREEN_WIDTH = 370;
+
+    int playerNameAreaFlexValue = 6;
+    int selectCardAreaFlexValue = 3;
+    int playerStatusAreaFlexValue = 3;
+    int playerActionAreaFlexValue = 2;
+
+    double playerActionIconSize = 24.0;
+    double leftRightPaddingAndMargin = 16;
+    double rightAreaPadding = 16;
+    double rightAreaHeaderPadding = 0;
+    double rightAreaHeaderRightWidthCalcAdjustment = 2;
+    double myIconSize = 50;
+
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        themeProvider.setThemeData(screenWidth);
+      }
+    });
+
+    if (screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH) {
+      playerActionIconSize = 18.0;
+      playerNameAreaFlexValue = 59;
+      selectCardAreaFlexValue = 28;
+      playerStatusAreaFlexValue = 23;
+      playerActionAreaFlexValue = 20;
+      leftRightPaddingAndMargin = 8;
+      rightAreaPadding = 0;
+      rightAreaHeaderPadding = leftRightPaddingAndMargin;
+      myIconSize = 36;
+    }
+
+    double voteResultAreaMarginBottom = 16;
+    double voteResultAreaPadding = 24;
+
+    double idealDrawAreaWidth = leftRightPaddingAndMargin +
         leftAreaWidth +
         rightAreaWidth +
-        drawInnerAreaBorderWidthSum; // 1つ目の16=drawAreaの左padding
+        drawInnerAreaBorderWidthSum; // 1つ目のleftRightPaddingAndMargin=drawAreaの左padding
     double marginAreaWidth = screenWidth >
             idealDrawAreaWidth + drawAreaBorderWidthSum
         ? (screenWidth - (idealDrawAreaWidth + drawAreaBorderWidthSum)) / 2 -
@@ -59,28 +99,39 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
     double rightAreaRatio =
         rightAreaWidth / (leftAreaWidth + rightAreaWidth) * 100;
     double drawAreaWidth = 0;
-    if (16 +
+    bool isOneColumn = false;
+    if (leftRightPaddingAndMargin +
                 rightAreaWidth +
                 drawAreaBorderWidthSum +
                 drawInnerAreaBorderWidthSum >=
             screenWidth ||
         (screenWidth >= 617 && screenWidth <= 653)) {
       // leftAreaWidth が (screenWidth >= 617 && screenWidth <= 653) 程度より小さい場合、leftAreaWidthのウィジェッドの描画領域が子要素を賄えなくなり、エラーが出るため、この条件を追加
-      // 1つ目の16=drawAreaの左padding
+      // leftRightPaddingAndMargin=drawAreaの左padding
+      isOneColumn = true;
       drawAreaWidth = screenWidth - drawAreaBorderWidthSum;
       leftAreaWidth = drawAreaWidth -
-          16 -
-          drawInnerAreaBorderWidthSum; // 1つ目の16=drawAreaの左padding
+          leftRightPaddingAndMargin -
+          drawInnerAreaBorderWidthSum; // 1つ目のleftRightPaddingAndMargin=drawAreaの左padding
       rightAreaWidth = drawAreaWidth -
-          16 -
-          drawInnerAreaBorderWidthSum; // 1つ目の16=drawAreaの左padding
+          leftRightPaddingAndMargin -
+          drawInnerAreaBorderWidthSum; // 1つ目のleftRightPaddingAndMargin=drawAreaの左padding
+      voteResultAreaMarginBottom = 0;
+      voteResultAreaPadding =
+          screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH
+              ? 8
+              : 16;
     } else if (idealDrawAreaWidth + drawAreaBorderWidthSum > screenWidth) {
       drawAreaWidth = screenWidth - drawAreaBorderWidthSum;
-      leftAreaWidth = (drawAreaWidth - drawInnerAreaBorderWidthSum - 16) *
+      leftAreaWidth = (drawAreaWidth -
+                  drawInnerAreaBorderWidthSum -
+                  leftRightPaddingAndMargin) *
               leftAreaRatio /
               100 -
           1; // 1つ目の16=drawAreaの左padding、-1=コンテナが折り返されるのを防ぐため
-      rightAreaWidth = (drawAreaWidth - drawInnerAreaBorderWidthSum - 16) *
+      rightAreaWidth = (drawAreaWidth -
+                  drawInnerAreaBorderWidthSum -
+                  leftRightPaddingAndMargin) *
               rightAreaRatio /
               100 -
           1; // 1つ目の16=drawAreaの左padding、-1=コンテナが折り返されるのを防ぐため
@@ -88,14 +139,34 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
       drawAreaWidth =
           idealDrawAreaWidth + marginAreaWidth + marginBorderWidthSum;
     }
-    double rightAreaHeaderLeftWidth = (rightAreaWidth - 16 - 16 - 16) / 2 -
-        2; // 1つ目の16=rightAreaの左padding、2つ目の16=rightAreaの右padding、3つ目の16=rightAreaの右padding、3つ目のrightAreaの右margin、-2=なぜかrightAreaHeaderRightエリアから2px分ボタンがはみ出すので調整
-    double rightAreaHeaderRightWidth = rightAreaHeaderLeftWidth;
-    if (rightAreaHeaderRightWidth < (120 + 120 + 16 + 2)) {
-      // 120=ボタンの幅、16=rightAreaHeaderRightの右padding、2=なぜかrightAreaHeaderRightエリアから2px分ボタンがはみ出すので調整
-      rightAreaHeaderLeftWidth =
-          (rightAreaHeaderLeftWidth + rightAreaHeaderRightWidth) - 120;
-      rightAreaHeaderRightWidth = 120;
+
+    double rightAreaHeaderLeftWidth = 0;
+    double rightAreaHeaderRightWidth = 0;
+    if (screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH) {
+      rightAreaHeaderLeftWidth = rightAreaWidth -
+          (rightAreaPadding + rightAreaHeaderPadding) -
+          (rightAreaPadding + rightAreaHeaderPadding) -
+          leftRightPaddingAndMargin;
+      rightAreaHeaderRightWidth = rightAreaHeaderLeftWidth;
+    } else {
+      rightAreaHeaderLeftWidth = (rightAreaWidth -
+                  (rightAreaPadding + rightAreaHeaderPadding) -
+                  (rightAreaPadding + rightAreaHeaderPadding) -
+                  leftRightPaddingAndMargin) /
+              2 -
+          rightAreaHeaderRightWidthCalcAdjustment; // 1つ目の(rightAreaPadding + rightAreaHeaderPadding)=rightAreaの左padding、2つ目の(rightAreaPadding + rightAreaHeaderPadding)=rightAreaの右padding、leftRightPaddingAndMargin=rightAreaの右margin、-rightAreaHeaderRightWidthCalcAdjustment=なぜかrightAreaHeaderRightエリアからrightAreaHeaderRightWidthCalcAdjustmentpx分ボタンがはみ出すので調整
+      rightAreaHeaderRightWidth = rightAreaHeaderLeftWidth;
+      if (rightAreaHeaderRightWidth <
+          (120 +
+              120 +
+              (rightAreaPadding + rightAreaHeaderPadding) +
+              2 +
+              rightAreaHeaderRightWidthCalcAdjustment)) {
+        // 120=ボタンの幅、(rightAreaPadding + rightAreaHeaderPadding)=rightAreaHeaderRightの右padding、rightAreaHeaderRightWidthCalcAdjustment=なぜかrightAreaHeaderRightエリアからrightAreaHeaderRightWidthCalcAdjustmentpx分ボタンがはみ出すので調整
+        rightAreaHeaderLeftWidth =
+            (rightAreaHeaderLeftWidth + rightAreaHeaderRightWidth) - 120;
+        rightAreaHeaderRightWidth = 120;
+      }
     }
     double marginLeftPlus = 0;
     if (leftAreaWidth == rightAreaWidth) {
@@ -121,6 +192,65 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
             String prefsUserName = snapshot.data?[1] as String;
             Image prefsUserImage = snapshot.data?[2] as Image;
             bool isExistPrefsUserImage = snapshot.data?[3] as bool;
+            bool isBlockUser = snapshot.data?[4] as bool;
+
+            print('isBlockUser: $isBlockUser');
+            if (isBlockUser) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    color: Theme.of(context).canvasColor, // テーマの背景色を使用
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height,
+                  ),
+                  AlertDialog(
+                    backgroundColor: Colors.white, // 背景色を白に設定
+                    shape: RoundedRectangleBorder(
+                      // 縁の形状を設定
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: Color(0xFFE0E3E7), // 縁の色を設定
+                      ),
+                    ),
+                    title: Text('通知'),
+                    content: Text(
+                        'この部屋のプレイヤーからブロックされているため入室できません'), // データが利用できるときはそのデータを表示
+                    actions: <Widget>[
+                      SizedBox(
+                        height: 40,
+                        width: 104,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            MyRouterDelegate routerDelegate = Router.of(context)
+                                .routerDelegate as MyRouterDelegate;
+                            routerDelegate.setNewRoutePath('/');
+                          },
+                          child: Text(
+                            "閉じる",
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  color: Color(0xFFFFFFFF),
+                                ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFF4B39EF),
+                            foregroundColor: Color(0xFFFFFFFF),
+                            padding:
+                                EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }
 
             TextStyle? prefsUserNameStyle =
                 Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -143,16 +273,20 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                 if (exiterFuture == null) {
                   exiterFuture = getExiter(prefsUserName);
                 }
-                return FutureBuilder<String>(
+                return FutureBuilder<List<Object>>(
                   future: exiterFuture,
-                  builder:
-                      (BuildContext context, AsyncSnapshot<String> snapshot) {
+                  builder: (BuildContext context,
+                      AsyncSnapshot<List<Object>> snapshot) {
                     if (snapshot.connectionState == ConnectionState.done) {
                       if (snapshot.hasError) {
                         // エラーハンドリング
                         return Text('エラー: ${snapshot.error}');
                       } else {
-                        String? exiter = snapshot.data;
+                        String exiter = snapshot.data?[0] as String;
+                        bool blocked = snapshot.data?[1] as bool;
+                        if (blocked) {
+                          saveForUserBlockString();
+                        }
                         if (exiter != prefsUserName) {
                           return Stack(
                             alignment: Alignment.center,
@@ -174,7 +308,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                 ),
                                 title: Text('通知'),
                                 content: Text(
-                                    '${snapshot.data}によって退出させられました'), // データが利用できるときはそのデータを表示
+                                    '${exiter}によって退室させられました'), // データが利用できるときはそのデータを表示
                                 actions: <Widget>[
                                   SizedBox(
                                     height: 40,
@@ -258,8 +392,8 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            padding:
-                                EdgeInsetsDirectional.fromSTEB(16, 0, 0, 0),
+                            padding: EdgeInsetsDirectional.fromSTEB(
+                                leftRightPaddingAndMargin, 0, 0, 0),
                             margin: EdgeInsets.only(left: marginAreaWidth),
                             width: drawAreaWidth,
                             // decoration: BoxDecoration(
@@ -274,7 +408,14 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                 children: [
                                   Padding(
                                     padding: EdgeInsetsDirectional.fromSTEB(
-                                        16, 16, 16, 0),
+                                        leftRightPaddingAndMargin,
+                                        screenWidth <=
+                                                ThemeProvider
+                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                            ? 0
+                                            : 16,
+                                        leftRightPaddingAndMargin,
+                                        0),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.max,
                                       mainAxisAlignment:
@@ -307,16 +448,21 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                         Padding(
                                           padding:
                                               EdgeInsetsDirectional.fromSTEB(
-                                                  16, 12, 16, 12),
+                                                  leftRightPaddingAndMargin,
+                                                  12,
+                                                  leftRightPaddingAndMargin,
+                                                  12),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.max,
                                             children: [
                                               PopupMenuButton(
                                                 offset: Offset(
-                                                    0, 50 + 12), // メニューの表示位置を調整
+                                                    0,
+                                                    myIconSize +
+                                                        12), // メニューの表示位置を調整
                                                 icon: Container(
-                                                  width: 50,
-                                                  height: 50,
+                                                  width: myIconSize,
+                                                  height: myIconSize,
                                                   decoration: BoxDecoration(
                                                     color: Color(0x4C4B39EF),
                                                     borderRadius:
@@ -365,431 +511,273 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                       ),
                                                     );
                                                   }
+                                                  if (isOneColumn) {
+                                                    menuItems.add(
+                                                      PopupMenuItem(
+                                                        value: 'changeUserName',
+                                                        child: Text('名前を変更する',
+                                                            style: Theme.of(
+                                                                    context)
+                                                                .textTheme
+                                                                .labelMedium),
+                                                      ),
+                                                    );
+                                                    menuItems.add(
+                                                      PopupMenuItem(
+                                                        value: 'leavingTheRoom',
+                                                        child: Text('退室する',
+                                                            style: Theme.of(
+                                                                    context)
+                                                                .textTheme
+                                                                .labelMedium),
+                                                      ),
+                                                    );
+                                                  }
                                                   return menuItems;
                                                 },
                                                 onSelected: (value) async {
                                                   if (value ==
-                                                      'changeUserImage') {
-                                                    await showModalBottomSheet(
+                                                      'changeUserName') {
+                                                    showModalBottomSheet(
                                                       context: context,
                                                       builder: (BuildContext
                                                           context) {
-                                                        return ImageChangeBottomSheet(
+                                                        return NameChangeBottomSheet(
                                                           prefsUserName:
                                                               prefsUserName,
                                                           roomID: widget.roomID
                                                               .toString(),
-                                                          initialImage:
-                                                              prefsUserImage,
-                                                          isSaveServer: true,
+                                                          onUserNameChanged:
+                                                              () {
+                                                            setState(() {
+                                                              initFuture =
+                                                                  Future.wait([
+                                                                roomScreenCheckRoomExists(),
+                                                                checkUserName(
+                                                                    false),
+                                                                loadUserImage(),
+                                                                checkPrefsUserImage(),
+                                                                checkBlockUser(
+                                                                    widget
+                                                                        .roomID
+                                                                        .toString()),
+                                                              ]);
+                                                            });
+                                                          },
                                                         );
                                                       },
                                                     );
                                                   } else if (value ==
-                                                      'deleteUserImage') {
-                                                    await deleteUserImage();
-                                                    await deleteUserImageUrl(
-                                                        prefsUserName);
+                                                      'leavingTheRoom') {
+                                                    exitRoom(prefsUserName,
+                                                        prefsUserName, false);
+                                                  } else {
+                                                    if (value ==
+                                                        'changeUserImage') {
+                                                      await showModalBottomSheet(
+                                                        context: context,
+                                                        builder: (BuildContext
+                                                            context) {
+                                                          return ImageChangeBottomSheet(
+                                                            prefsUserName:
+                                                                prefsUserName,
+                                                            roomID: widget
+                                                                .roomID
+                                                                .toString(),
+                                                            initialImage:
+                                                                prefsUserImage,
+                                                            isSaveServer: true,
+                                                          );
+                                                        },
+                                                      );
+                                                    } else if (value ==
+                                                        'deleteUserImage') {
+                                                      await deleteUserImage();
+                                                      await deleteUserImageUrl(
+                                                          prefsUserName);
+                                                    }
+                                                    setState(() {
+                                                      initFuture = Future.wait([
+                                                        roomScreenCheckRoomExists(),
+                                                        checkUserName(true),
+                                                        loadUserImage(),
+                                                        checkPrefsUserImage(),
+                                                        checkBlockUser(widget
+                                                            .roomID
+                                                            .toString()),
+                                                      ]);
+                                                    });
                                                   }
-                                                  setState(() {
-                                                    initFuture = Future.wait([
-                                                      roomScreenCheckRoomExists(),
-                                                      checkUserName(true),
-                                                      loadUserImage(),
-                                                      checkPrefsUserImage(),
-                                                    ]);
-                                                  });
                                                 },
                                               ),
-                                              Container(
-                                                constraints: BoxConstraints(
-                                                  minWidth: 96,
-                                                  maxWidth: min(
-                                                      max(screenWidth * 0.3,
-                                                          96),
-                                                      192),
-                                                ),
-                                                padding: EdgeInsetsDirectional
-                                                    // .fromSTEB(4, 0, 0, 0),
-                                                    .fromSTEB(0, 0, 0, 0),
-                                                child: Column(
-                                                  // mainAxisSize: MainAxisSize.max,
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Transform.translate(
-                                                      offset: Offset(
-                                                          prefsUserNameTextPainter
-                                                                      .size
-                                                                      .width <
-                                                                  12
-                                                              ? -12.0
-                                                              : prefsUserNameTextPainter
-                                                                          .size
-                                                                          .width <
-                                                                      24
-                                                                  ? -8.0
-                                                                  : -6.0,
-                                                          8.0),
-                                                      child: PopupMenuButton(
-                                                        offset: Offset(
-                                                          0,
-                                                          prefsUserNameTextPainter
-                                                                  .size.height +
-                                                              24,
-                                                        ), // メニューの表示位置を調整
-                                                        icon: Container(
-                                                          child: Text(
-                                                            prefsUserName,
-                                                            style:
-                                                                prefsUserNameStyle,
-                                                          ),
-                                                        ),
-                                                        itemBuilder:
-                                                            (BuildContext
-                                                                context) {
-                                                          List<PopupMenuEntry>
-                                                              menuItems = [
-                                                            PopupMenuItem(
-                                                              value:
-                                                                  'changeUserName',
-                                                              child: Text(
-                                                                  '名前を変更する',
-                                                                  style: Theme.of(
-                                                                          context)
-                                                                      .textTheme
-                                                                      .labelMedium),
-                                                            ),
-                                                          ];
-                                                          return menuItems;
-                                                        },
-                                                        onSelected:
-                                                            (value) async {
-                                                          if (value ==
-                                                              'changeUserName') {
-                                                            showModalBottomSheet(
-                                                              context: context,
-                                                              builder:
+                                              isOneColumn
+                                                  ? Container()
+                                                  : Container(
+                                                      constraints:
+                                                          BoxConstraints(
+                                                        minWidth: 96,
+                                                        maxWidth: min(
+                                                            max(
+                                                                screenWidth *
+                                                                    0.3,
+                                                                96),
+                                                            192),
+                                                      ),
+                                                      padding: EdgeInsetsDirectional
+                                                          // .fromSTEB(4, 0, 0, 0),
+                                                          .fromSTEB(0, 0, 0, 0),
+                                                      child: Column(
+                                                        // mainAxisSize: MainAxisSize.max,
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Transform.translate(
+                                                            offset: Offset(
+                                                                prefsUserNameTextPainter
+                                                                            .size
+                                                                            .width <
+                                                                        12
+                                                                    ? -12.0
+                                                                    : prefsUserNameTextPainter.size.width <
+                                                                            24
+                                                                        ? -8.0
+                                                                        : -6.0,
+                                                                8.0),
+                                                            child:
+                                                                PopupMenuButton(
+                                                              offset: Offset(
+                                                                0,
+                                                                prefsUserNameTextPainter
+                                                                        .size
+                                                                        .height +
+                                                                    24,
+                                                              ), // メニューの表示位置を調整
+                                                              icon: Container(
+                                                                child: Text(
+                                                                  prefsUserName,
+                                                                  style:
+                                                                      prefsUserNameStyle,
+                                                                ),
+                                                              ),
+                                                              itemBuilder:
                                                                   (BuildContext
                                                                       context) {
-                                                                final _nameController =
-                                                                    TextEditingController(
-                                                                        text:
-                                                                            prefsUserName);
-
-                                                                bool
-                                                                    changeUserNameIsLoading =
-                                                                    false;
-                                                                String
-                                                                    errorMessage =
-                                                                    '';
-                                                                bool showError =
-                                                                    false;
-
-                                                                AnimationController
-                                                                    _controller =
-                                                                    AnimationController(
-                                                                  duration: const Duration(
-                                                                      milliseconds:
-                                                                          500),
-                                                                  reverseDuration:
-                                                                      const Duration(
-                                                                          milliseconds:
-                                                                              500),
-                                                                  vsync: this,
-                                                                );
-
-                                                                Animation<
-                                                                        Offset>
-                                                                    _offsetAnimation =
-                                                                    Tween<
-                                                                        Offset>(
-                                                                  begin:
-                                                                      const Offset(
-                                                                          0.0,
-                                                                          -1.0),
-                                                                  end: Offset
-                                                                      .zero,
-                                                                ).animate(
-                                                                        CurvedAnimation(
-                                                                  parent:
-                                                                      _controller,
-                                                                  curve: Curves
-                                                                      .easeInOut,
-                                                                ));
-
-                                                                Timer?
-                                                                    _hideErrorTimer;
-
-                                                                return StatefulBuilder(builder:
-                                                                    (BuildContext
-                                                                            context,
-                                                                        StateSetter
-                                                                            setModalState) {
-                                                                  void
-                                                                      hideErrorMsg() async {
-                                                                    await _controller
-                                                                        .reverse();
-                                                                    setModalState(
-                                                                        () {
-                                                                      showError =
-                                                                          false;
-                                                                      errorMessage =
-                                                                          '';
-                                                                    });
-
-                                                                    Future.delayed(
-                                                                        Duration(
-                                                                            seconds:
-                                                                                1),
-                                                                        () {});
-                                                                  }
-
-                                                                  void showErrorMsg(
-                                                                      String
-                                                                          msg) {
-                                                                    _controller
-                                                                        .reset();
-
-                                                                    // 前回のタイマーがあればキャンセル
-                                                                    _hideErrorTimer
-                                                                        ?.cancel();
-
-                                                                    setModalState(
-                                                                        () {
-                                                                      showError =
-                                                                          true;
-                                                                      errorMessage =
-                                                                          msg;
-                                                                      _controller
-                                                                          .forward();
-                                                                    });
-
-                                                                    // hideErrorMsgを呼び出すタイマーを設定
-                                                                    _hideErrorTimer = Timer(
-                                                                        Duration(
-                                                                            seconds:
-                                                                                3),
-                                                                        () {
-                                                                      if (showError) {
-                                                                        hideErrorMsg();
-                                                                      }
-                                                                    });
-                                                                  }
-
-                                                                  return Stack(
-                                                                    children: <Widget>[
-                                                                      Container(
-                                                                        width: min(
-                                                                            MediaQuery.of(context).size.width *
-                                                                                0.8,
-                                                                            400),
-                                                                        child:
-                                                                            SingleChildScrollView(
-                                                                          child:
-                                                                              Container(
-                                                                            padding:
-                                                                                EdgeInsets.all(16),
-                                                                            child:
-                                                                                Column(
-                                                                              mainAxisAlignment: MainAxisAlignment.center,
-                                                                              crossAxisAlignment: CrossAxisAlignment.center,
-                                                                              children: <Widget>[
-                                                                                Container(
-                                                                                  width: 200, // テキストフィールドの幅を制限
-                                                                                  child: TextField(
-                                                                                    controller: _nameController,
-                                                                                    decoration: InputDecoration(
-                                                                                      labelText: '名前',
-                                                                                      labelStyle: TextStyle(
-                                                                                        fontSize: 12, // フォントサイズを小さくする
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                                SizedBox(height: 16),
-                                                                                showError
-                                                                                    ? SlideTransition(
-                                                                                        position: _offsetAnimation,
-                                                                                        child: Container(
-                                                                                          width: MediaQuery.of(context).size.width,
-                                                                                          padding: EdgeInsets.all(8.0),
-                                                                                          decoration: BoxDecoration(
-                                                                                            color: Color(0x80000000),
-                                                                                            borderRadius: BorderRadius.circular(8),
-                                                                                          ),
-                                                                                          child: Text(
-                                                                                            errorMessage,
-                                                                                            style: TextStyle(color: Colors.white, fontSize: 16),
-                                                                                            textAlign: TextAlign.center,
-                                                                                          ),
-                                                                                        ),
-                                                                                      )
-                                                                                    : Container(),
-                                                                                SizedBox(height: showError ? 16 : 0),
-                                                                                Row(
-                                                                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                                                                  children: <Widget>[
-                                                                                    Expanded(
-                                                                                      child: Container(
-                                                                                        margin: EdgeInsets.symmetric(horizontal: 8.0),
-                                                                                        height: 40,
-                                                                                        child: ElevatedButton(
-                                                                                          onPressed: () {
-                                                                                            // モーダルを閉じる
-                                                                                            Navigator.of(context).pop();
-                                                                                          },
-                                                                                          child: Text(
-                                                                                            'キャンセル',
-                                                                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                                                                                  color: Color(0xFF4B39EF),
-                                                                                                ),
-                                                                                          ),
-                                                                                          style: ElevatedButton.styleFrom(
-                                                                                            backgroundColor: Color(0xFFFFFFFF),
-                                                                                            foregroundColor: Color(0xFF4B39EF),
-                                                                                            padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
-                                                                                            shape: RoundedRectangleBorder(
-                                                                                              borderRadius: BorderRadius.circular(8),
-                                                                                            ),
-                                                                                          ),
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                    Expanded(
-                                                                                      child: Container(
-                                                                                        margin: EdgeInsets.symmetric(horizontal: 8.0),
-                                                                                        height: 40,
-                                                                                        child: ElevatedButton(
-                                                                                          onPressed: () async {
-                                                                                            setModalState(() {
-                                                                                              changeUserNameIsLoading = true;
-                                                                                            });
-
-                                                                                            try {
-                                                                                              errorMessage = await changeUserName(prefsUserName, _nameController.text);
-                                                                                            } catch (e) {
-                                                                                              print('Error occurred during saveImage or loadUserImage: $e');
-                                                                                            }
-
-                                                                                            setModalState(() {
-                                                                                              changeUserNameIsLoading = false;
-                                                                                            });
-                                                                                            if (errorMessage.isEmpty) {
-                                                                                              // 処理が終わったらモーダルは閉じる
-                                                                                              Navigator.of(context).pop();
-                                                                                            } else {
-                                                                                              showErrorMsg(errorMessage);
-                                                                                            }
-                                                                                          },
-                                                                                          child: Text(
-                                                                                            '保存する',
-                                                                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                                                                                  color: Color(0xFFFFFFFF),
-                                                                                                ),
-                                                                                          ),
-                                                                                          style: ElevatedButton.styleFrom(
-                                                                                            backgroundColor: Color(0xFF4B39EF),
-                                                                                            foregroundColor: Color(0xFFFFFFFF),
-                                                                                            padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
-                                                                                            shape: RoundedRectangleBorder(
-                                                                                              borderRadius: BorderRadius.circular(8),
-                                                                                            ),
-                                                                                          ),
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      if (changeUserNameIsLoading)
-                                                                        Positioned(
-                                                                          top:
-                                                                              0,
-                                                                          bottom:
-                                                                              0,
-                                                                          left:
-                                                                              0,
-                                                                          right:
-                                                                              0,
-                                                                          child:
-                                                                              Center(
-                                                                            child:
-                                                                                CircularProgressIndicator(),
-                                                                          ),
-                                                                        ),
-                                                                    ],
-                                                                  );
-                                                                });
+                                                                List<PopupMenuEntry>
+                                                                    menuItems =
+                                                                    [
+                                                                  PopupMenuItem(
+                                                                    value:
+                                                                        'changeUserName',
+                                                                    child: Text(
+                                                                        '名前を変更する',
+                                                                        style: Theme.of(context)
+                                                                            .textTheme
+                                                                            .labelMedium),
+                                                                  ),
+                                                                ];
+                                                                return menuItems;
                                                               },
-                                                            );
-                                                          }
-                                                        },
-                                                      ),
-                                                    ),
-                                                    Transform.translate(
-                                                      offset:
-                                                          Offset(-4.0, -8.0),
-                                                      child: TextButton(
-                                                        onPressed: () {
-                                                          exitRoom(
-                                                              prefsUserName,
-                                                              prefsUserName);
-                                                        },
-                                                        style: ButtonStyle(
-                                                          padding:
-                                                              WidgetStateProperty
-                                                                  .all<
-                                                                      EdgeInsetsGeometry>(
-                                                            EdgeInsetsDirectional
-                                                                .fromSTEB(
-                                                                    4, 0, 4, 0),
-                                                          ),
-                                                          backgroundColor:
-                                                              WidgetStateProperty
-                                                                  .resolveWith<
-                                                                      Color?>(
-                                                            (Set<WidgetState>
-                                                                states) {
-                                                              if (states.contains(
-                                                                  WidgetState
-                                                                      .hovered))
-                                                                return Color(
-                                                                    0x80EBEBEB); // ホバー時の背景色
-                                                              return null; // ホバーしていないときの背景色（無し）
-                                                            },
-                                                          ),
-                                                          shape: WidgetStateProperty
-                                                              .all<
-                                                                  RoundedRectangleBorder>(
-                                                            RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          16), // 四隅の丸みの半径を設定
-                                                              side: BorderSide
-                                                                  .none,
+                                                              onSelected:
+                                                                  (value) async {
+                                                                if (value ==
+                                                                    'changeUserName') {
+                                                                  showModalBottomSheet(
+                                                                    context:
+                                                                        context,
+                                                                    builder:
+                                                                        (BuildContext
+                                                                            context) {
+                                                                      return NameChangeBottomSheet(
+                                                                        prefsUserName:
+                                                                            prefsUserName,
+                                                                        roomID: widget
+                                                                            .roomID
+                                                                            .toString(),
+                                                                        onUserNameChanged:
+                                                                            () {
+                                                                          setState(
+                                                                              () {
+                                                                            initFuture =
+                                                                                Future.wait([
+                                                                              roomScreenCheckRoomExists(),
+                                                                              checkUserName(false),
+                                                                              loadUserImage(),
+                                                                              checkPrefsUserImage(),
+                                                                              checkBlockUser(widget.roomID.toString()),
+                                                                            ]);
+                                                                          });
+                                                                        },
+                                                                      );
+                                                                    },
+                                                                  );
+                                                                }
+                                                              },
                                                             ),
                                                           ),
-                                                        ),
-                                                        child: Text(
-                                                          '退出する',
-                                                          style:
-                                                              Theme.of(context)
-                                                                  .textTheme
-                                                                  .labelMedium,
-                                                        ),
+                                                          Transform.translate(
+                                                            offset: Offset(
+                                                                -4.0, -8.0),
+                                                            child: TextButton(
+                                                              onPressed: () {
+                                                                exitRoom(
+                                                                    prefsUserName,
+                                                                    prefsUserName,
+                                                                    false);
+                                                              },
+                                                              style:
+                                                                  ButtonStyle(
+                                                                padding:
+                                                                    WidgetStateProperty
+                                                                        .all<
+                                                                            EdgeInsetsGeometry>(
+                                                                  EdgeInsetsDirectional
+                                                                      .fromSTEB(
+                                                                          4,
+                                                                          0,
+                                                                          4,
+                                                                          0),
+                                                                ),
+                                                                backgroundColor:
+                                                                    WidgetStateProperty
+                                                                        .resolveWith<
+                                                                            Color?>(
+                                                                  (Set<WidgetState>
+                                                                      states) {
+                                                                    if (states.contains(
+                                                                        WidgetState
+                                                                            .hovered))
+                                                                      return Color(
+                                                                          0x80EBEBEB); // ホバー時の背景色
+                                                                    return null; // ホバーしていないときの背景色（無し）
+                                                                  },
+                                                                ),
+                                                                shape: WidgetStateProperty
+                                                                    .all<
+                                                                        RoundedRectangleBorder>(
+                                                                  RoundedRectangleBorder(
+                                                                    borderRadius:
+                                                                        BorderRadius.circular(
+                                                                            16), // 四隅の丸みの半径を設定
+                                                                    side: BorderSide
+                                                                        .none,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                '退室する',
+                                                                style: Theme.of(
+                                                                        context)
+                                                                    .textTheme
+                                                                    .labelMedium,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
                                                     ),
-                                                  ],
-                                                ),
-                                              ),
                                             ],
                                           ),
                                         ),
@@ -800,7 +788,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                     alignment: AlignmentDirectional(-1, 0),
                                     child: Container(
                                       padding: EdgeInsetsDirectional.fromSTEB(
-                                          0, 0, 16, 0),
+                                          0, 0, leftRightPaddingAndMargin, 0),
                                       width: 732,
                                       // decoration: BoxDecoration(
                                       //   border: Border.all(
@@ -809,12 +797,29 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                       //   ),
                                       // ),
                                       child: Wrap(
-                                        spacing: 16, // ボタン間のスペース
+                                        alignment: screenWidth <=
+                                                ThemeProvider
+                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                            ? WrapAlignment.center
+                                            : WrapAlignment.start, // ボタンの配置を制御
+                                        spacing: screenWidth <=
+                                                ThemeProvider
+                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                            ? 8
+                                            : 16, // ボタン間のスペース
                                         runSpacing: 16, // 行間のスペース
                                         children: cardNumbers.map((cardNumber) {
                                           return SizedBox(
-                                            height: 40,
-                                            width: 104,
+                                            height: screenWidth <=
+                                                    ThemeProvider
+                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                ? 32
+                                                : 40,
+                                            width: screenWidth <=
+                                                    ThemeProvider
+                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                ? 64
+                                                : 104,
                                             child: ElevatedButton(
                                               onPressed: () async {
                                                 await saveUserCardSelection(
@@ -831,7 +836,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                 }
                                               },
                                               child: Text(
-                                                "${cardNumber} point${double.parse(cardNumber) > 1 ? 's' : ''}",
+                                                screenWidth <=
+                                                        ThemeProvider
+                                                            .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                    ? "${cardNumber} p"
+                                                    : "${cardNumber} point${double.parse(cardNumber) > 1 ? 's' : ''}",
                                                 style: Theme.of(context)
                                                     .textTheme
                                                     .titleSmall
@@ -927,23 +936,22 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                             }
                                                             var entry =
                                                                 entries[i];
-                                                            EdgeInsetsDirectional
-                                                                cardCountsContainerMargin =
-                                                                i == 0
-                                                                    ? EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            0,
-                                                                            16,
-                                                                            16 +
-                                                                                marginLeftPlus,
-                                                                            0)
-                                                                    : EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            0,
-                                                                            8,
-                                                                            16 +
-                                                                                marginLeftPlus,
-                                                                            0);
+                                                            EdgeInsetsDirectional cardCountsContainerMargin = i ==
+                                                                    0
+                                                                ? EdgeInsetsDirectional
+                                                                    .fromSTEB(
+                                                                        0,
+                                                                        16,
+                                                                        leftRightPaddingAndMargin +
+                                                                            marginLeftPlus,
+                                                                        0)
+                                                                : EdgeInsetsDirectional
+                                                                    .fromSTEB(
+                                                                        0,
+                                                                        8,
+                                                                        leftRightPaddingAndMargin +
+                                                                            marginLeftPlus,
+                                                                        0);
                                                             widgets.add(
                                                               Container(
                                                                 margin:
@@ -974,9 +982,9 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                 child: Padding(
                                                                   padding: EdgeInsetsDirectional
                                                                       .fromSTEB(
-                                                                          16,
+                                                                          leftRightPaddingAndMargin,
                                                                           0,
-                                                                          16,
+                                                                          leftRightPaddingAndMargin,
                                                                           0),
                                                                   child: Row(
                                                                     mainAxisSize:
@@ -1121,13 +1129,12 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                   : 1);
 
                                                           return Container(
-                                                            margin: EdgeInsetsDirectional
-                                                                .fromSTEB(
-                                                                    0,
-                                                                    16,
-                                                                    16 +
-                                                                        marginLeftPlus,
-                                                                    0),
+                                                            margin: EdgeInsetsDirectional.fromSTEB(
+                                                                0,
+                                                                16,
+                                                                leftRightPaddingAndMargin +
+                                                                    marginLeftPlus,
+                                                                voteResultAreaMarginBottom),
                                                             width:
                                                                 double.infinity,
                                                             constraints:
@@ -1212,9 +1219,9 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                       child:
                                                                           Padding(
                                                                         padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            24,
+                                                                            voteResultAreaPadding,
                                                                             0,
-                                                                            24,
+                                                                            voteResultAreaPadding,
                                                                             0),
                                                                         child:
                                                                             Row(
@@ -1256,12 +1263,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                             0),
                                                                     child:
                                                                         Padding(
-                                                                      padding: EdgeInsetsDirectional
-                                                                          .fromSTEB(
-                                                                              24,
-                                                                              24,
-                                                                              24,
-                                                                              0),
+                                                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                                                          voteResultAreaPadding,
+                                                                          voteResultAreaPadding,
+                                                                          voteResultAreaPadding,
+                                                                          0),
                                                                       child:
                                                                           CircularPercentIndicator(
                                                                         percent: userCount >
@@ -1295,12 +1301,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                     ),
                                                                   ),
                                                                   Padding(
-                                                                    padding: EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            24,
-                                                                            16,
-                                                                            24,
-                                                                            0),
+                                                                    padding: EdgeInsetsDirectional.fromSTEB(
+                                                                        voteResultAreaPadding,
+                                                                        16,
+                                                                        voteResultAreaPadding,
+                                                                        0),
                                                                     child: Text(
                                                                         isResultVisibleModel.resultVisible
                                                                             ? '平均値'
@@ -1310,12 +1315,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                             .bodyLarge),
                                                                   ),
                                                                   Padding(
-                                                                    padding: EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            24,
-                                                                            4,
-                                                                            24,
-                                                                            8),
+                                                                    padding: EdgeInsetsDirectional.fromSTEB(
+                                                                        voteResultAreaPadding,
+                                                                        4,
+                                                                        voteResultAreaPadding,
+                                                                        8),
                                                                     child: Text(
                                                                         isResultVisibleModel.resultVisible
                                                                             ? "${(averagePoints * 10).round() / 10} point${averagePoints > 1 ? 's' : ''}"
@@ -1345,8 +1349,12 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                     0, 0, 0, 0),
                                             child: Container(
                                               margin: EdgeInsetsDirectional
-                                                  .fromSTEB(0, 16,
-                                                      16 + marginLeftPlus, 16),
+                                                  .fromSTEB(
+                                                      0,
+                                                      16,
+                                                      leftRightPaddingAndMargin +
+                                                          marginLeftPlus,
+                                                      16),
                                               width: double.infinity,
                                               constraints: BoxConstraints(
                                                 maxWidth: rightAreaWidth,
@@ -1361,7 +1369,12 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                 ),
                                               ),
                                               child: Padding(
-                                                padding: EdgeInsets.all(16),
+                                                padding: EdgeInsetsDirectional
+                                                    .fromSTEB(
+                                                        rightAreaPadding,
+                                                        16,
+                                                        rightAreaPadding,
+                                                        16),
                                                 child: Column(
                                                   mainAxisSize:
                                                       MainAxisSize.max,
@@ -1369,7 +1382,13 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     IntrinsicHeight(
-                                                      child: Row(
+                                                      child: Flex(
+                                                        direction: screenWidth <=
+                                                                ThemeProvider
+                                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                            ? Axis.vertical
+                                                            : Axis
+                                                                .horizontal, // screenWidthがThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH以下の場合はColumn（垂直方向）、それ以外の場合はRow（水平方向）
                                                         mainAxisSize:
                                                             MainAxisSize.max,
                                                         mainAxisAlignment:
@@ -1390,7 +1409,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                 Padding(
                                                                   padding: EdgeInsetsDirectional
                                                                       .fromSTEB(
-                                                                          0,
+                                                                          rightAreaHeaderPadding,
                                                                           0,
                                                                           12,
                                                                           0),
@@ -1401,29 +1420,50 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                           .textTheme
                                                                           .headlineMedium),
                                                                 ),
-                                                                Padding(
-                                                                  padding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0,
-                                                                          4,
-                                                                          12,
-                                                                          0),
-                                                                  child: Text(
-                                                                      '各プレイヤーのカード選択状況は以下の通りです',
-                                                                      style: Theme.of(
-                                                                              context)
-                                                                          .textTheme
-                                                                          .labelMedium),
-                                                                ),
+                                                                screenWidth <=
+                                                                        ThemeProvider
+                                                                            .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                    ? Container()
+                                                                    : Padding(
+                                                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                                                            rightAreaHeaderPadding,
+                                                                            4,
+                                                                            12,
+                                                                            0),
+                                                                        child: Text(
+                                                                            '各プレイヤーのカード選択状況は以下の通りです',
+                                                                            style:
+                                                                                Theme.of(context).textTheme.labelMedium),
+                                                                      ),
                                                               ],
                                                             ),
                                                           ),
                                                           Container(
                                                             width:
                                                                 rightAreaHeaderRightWidth,
+                                                            padding: screenWidth <=
+                                                                    ThemeProvider
+                                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                ? EdgeInsetsDirectional
+                                                                    .fromSTEB(
+                                                                        rightAreaHeaderPadding,
+                                                                        16,
+                                                                        rightAreaHeaderPadding,
+                                                                        0)
+                                                                : EdgeInsetsDirectional
+                                                                    .fromSTEB(
+                                                                        0,
+                                                                        0,
+                                                                        rightAreaHeaderPadding,
+                                                                        0),
                                                             child: Align(
-                                                              alignment: Alignment
-                                                                  .centerRight,
+                                                              alignment: screenWidth <=
+                                                                      ThemeProvider
+                                                                          .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                  ? Alignment
+                                                                      .centerLeft
+                                                                  : Alignment
+                                                                      .centerRight,
                                                               child: Wrap(
                                                                 spacing:
                                                                     16, // ボタン間のスペース
@@ -1559,26 +1599,31 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                           ),
                                                         ),
                                                         child: Padding(
-                                                          padding:
-                                                              EdgeInsetsDirectional
-                                                                  .fromSTEB(16,
-                                                                      0, 16, 0),
+                                                          padding: EdgeInsetsDirectional
+                                                              .fromSTEB(
+                                                                  leftRightPaddingAndMargin,
+                                                                  0,
+                                                                  leftRightPaddingAndMargin,
+                                                                  0),
                                                           child: Row(
                                                             mainAxisSize:
                                                                 MainAxisSize
                                                                     .max,
                                                             children: [
                                                               Expanded(
-                                                                flex: 6,
+                                                                flex:
+                                                                    playerNameAreaFlexValue,
                                                                 child: Text(
-                                                                    'プレイヤー',
-                                                                    style: Theme.of(
-                                                                            context)
-                                                                        .textTheme
-                                                                        .labelSmall),
+                                                                  'プレイヤー',
+                                                                  style: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .labelSmall,
+                                                                ),
                                                               ),
                                                               Expanded(
-                                                                flex: 3,
+                                                                flex:
+                                                                    selectCardAreaFlexValue,
                                                                 child: Text(
                                                                   '選択カード',
                                                                   style: Theme.of(
@@ -1591,7 +1636,8 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                 ),
                                                               ),
                                                               Expanded(
-                                                                flex: 3,
+                                                                flex:
+                                                                    playerStatusAreaFlexValue,
                                                                 child: Text(
                                                                   '状態',
                                                                   style: Theme.of(
@@ -1604,7 +1650,8 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                 ),
                                                               ),
                                                               Expanded(
-                                                                flex: 2,
+                                                                flex:
+                                                                    playerActionAreaFlexValue,
                                                                 child: Padding(
                                                                   padding: EdgeInsets
                                                                       .only(
@@ -1616,8 +1663,12 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                             context)
                                                                         .textTheme
                                                                         .labelSmall,
-                                                                    textAlign:
-                                                                        TextAlign
+                                                                    textAlign: screenWidth <=
+                                                                            ThemeProvider
+                                                                                .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                        ? TextAlign
+                                                                            .center
+                                                                        : TextAlign
                                                                             .end,
                                                                   ),
                                                                 ),
@@ -1632,6 +1683,9 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                       builder: (context,
                                                           selectedCardsModel,
                                                           child) {
+                                                        String roomIDString =
+                                                            widget.roomID
+                                                                .toString();
                                                         List<Widget> widgets =
                                                             [];
                                                         for (var entry
@@ -1770,7 +1824,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                       children: [
                                                                         Expanded(
                                                                           flex:
-                                                                              6,
+                                                                              playerNameAreaFlexValue,
                                                                           child:
                                                                               Padding(
                                                                             padding: EdgeInsetsDirectional.fromSTEB(
@@ -1827,7 +1881,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                         ),
                                                                         Expanded(
                                                                           flex:
-                                                                              3,
+                                                                              selectCardAreaFlexValue,
                                                                           child:
                                                                               LayoutBuilder(
                                                                             builder:
@@ -1850,7 +1904,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                         ),
                                                                         Expanded(
                                                                           flex:
-                                                                              3,
+                                                                              playerStatusAreaFlexValue,
                                                                           child:
                                                                               Row(
                                                                             mainAxisSize:
@@ -1858,27 +1912,39 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                             mainAxisAlignment:
                                                                                 MainAxisAlignment.center,
                                                                             children: [
-                                                                              Container(
-                                                                                height: 32,
-                                                                                decoration: BoxDecoration(
-                                                                                  color: (cardEntrySelectedCard.isEmpty) ? Color(0xFFF1F4F8) : Color(0x4D39D2C0),
-                                                                                  borderRadius: BorderRadius.circular(40),
-                                                                                  border: Border.all(
-                                                                                    color: (cardEntrySelectedCard.isEmpty) ? Color(0x00000000) : Color(0xFF39D2C0),
-                                                                                  ),
-                                                                                ),
-                                                                                alignment: AlignmentDirectional(0, 0),
-                                                                                child: Padding(
-                                                                                  padding: EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
-                                                                                  child: Text((cardEntrySelectedCard.isEmpty) ? '未選択' : '選択済', style: Theme.of(context).textTheme.bodyMedium),
-                                                                                ),
-                                                                              ),
+                                                                              screenWidth <= SMART_PHONE_SMALL_SCREEN_WIDTH
+                                                                                  ? cardEntrySelectedCard.isEmpty
+                                                                                      ? Icon(
+                                                                                          Icons.check_box_outline_blank,
+                                                                                          color: Color(0xFFF1F4F8),
+                                                                                          size: 24,
+                                                                                        )
+                                                                                      : Icon(
+                                                                                          Icons.check_box,
+                                                                                          color: Color(0xFF39D2C0),
+                                                                                          size: 24,
+                                                                                        )
+                                                                                  : Container(
+                                                                                      height: 32,
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: cardEntrySelectedCard.isEmpty ? Color(0xFFF1F4F8) : Color(0x4D39D2C0),
+                                                                                        borderRadius: BorderRadius.circular(40),
+                                                                                        border: Border.all(
+                                                                                          color: cardEntrySelectedCard.isEmpty ? Color(0x00000000) : Color(0xFF39D2C0),
+                                                                                        ),
+                                                                                      ),
+                                                                                      alignment: AlignmentDirectional(0, 0),
+                                                                                      child: Padding(
+                                                                                        padding: screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH ? EdgeInsetsDirectional.fromSTEB(8, 0, 8, 0) : EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
+                                                                                        child: Text(cardEntrySelectedCard.isEmpty ? '未選択' : '選択済', style: Theme.of(context).textTheme.bodyMedium),
+                                                                                      ),
+                                                                                    ),
                                                                             ],
                                                                           ),
                                                                         ),
                                                                         Expanded(
                                                                           flex:
-                                                                              2,
+                                                                              playerActionAreaFlexValue,
                                                                           child:
                                                                               Row(
                                                                             mainAxisSize:
@@ -1891,16 +1957,50 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                                 icon: Icon(
                                                                                   Icons.more_vert,
                                                                                   color: Color(0xFF57636C),
+                                                                                  size: playerActionIconSize,
                                                                                 ),
-                                                                                itemBuilder: (BuildContext context) => <PopupMenuEntry>[
-                                                                                  PopupMenuItem(
-                                                                                    value: 'exit',
-                                                                                    child: Text(cardEntryUserName == prefsUserName ? '退出する' : '退出させる', style: Theme.of(context).textTheme.labelMedium),
-                                                                                  ),
-                                                                                ],
+                                                                                itemBuilder: (BuildContext context) {
+                                                                                  List<PopupMenuEntry> menuItems = [
+                                                                                    PopupMenuItem(
+                                                                                      value: 'exit',
+                                                                                      child: Text(cardEntryUserName == prefsUserName ? '退室する' : '退室させる', style: Theme.of(context).textTheme.labelMedium),
+                                                                                    ),
+                                                                                  ];
+                                                                                  if (cardEntryUserName != prefsUserName) {
+                                                                                    menuItems.add(
+                                                                                      PopupMenuItem(
+                                                                                        value: 'block',
+                                                                                        child: Text('入室をブロックする', style: Theme.of(context).textTheme.labelMedium),
+                                                                                      ),
+                                                                                    );
+                                                                                    // iOSの場合のみ表示
+                                                                                    if (Theme.of(context).platform == TargetPlatform.iOS) {
+                                                                                      menuItems.add(
+                                                                                        PopupMenuItem(
+                                                                                          value: 'report',
+                                                                                          child: Text('違反を報告する', style: Theme.of(context).textTheme.labelMedium),
+                                                                                        ),
+                                                                                      );
+                                                                                    }
+                                                                                  }
+
+                                                                                  return menuItems;
+                                                                                },
                                                                                 onSelected: (value) {
                                                                                   if (value == 'exit') {
-                                                                                    exitRoom(cardEntryUserName, prefsUserName);
+                                                                                    exitRoom(cardEntryUserName, prefsUserName, false);
+                                                                                  } else if (value == 'report') {
+                                                                                    showModalBottomSheet(
+                                                                                      context: context,
+                                                                                      builder: (BuildContext context) {
+                                                                                        return ReportUserBottomSheet(
+                                                                                          roomID: roomIDString,
+                                                                                          onReportSuccess: () => showReportCompleteMessage(),
+                                                                                        );
+                                                                                      },
+                                                                                    );
+                                                                                  } else if (value == 'block') {
+                                                                                    exitRoom(cardEntryUserName, prefsUserName, true);
                                                                                   }
                                                                                 },
                                                                               ),
@@ -1937,14 +2037,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                             marginLeftPlus <= 0)
                                           Container(
                                             width: marginAreaWidth,
-                                            // decoration: BoxDecoration(
-                                            //   border: Border.all(
-                                            //     color: Colors.red,
-                                            //     width: marginBorderWidthSum / 2,
-                                            //   ),
-                                            // ),
                                           ),
-                                        //),
                                       ],
                                     ),
                                   ),
@@ -1983,6 +2076,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
             }
           }
         });
+    // });
   }
 
   void initState() {
@@ -1992,6 +2086,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
       checkUserName(true),
       loadUserImage(),
       checkPrefsUserImage(),
+      checkBlockUser(widget.roomID.toString()),
     ]);
 
     cardNumbers = generateFibonacciNumbers(89); // ここでカード群を生成します
@@ -2139,8 +2234,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
   // フィボナッチ数列を生成する関数
   List<String> generateFibonacciNumbers(int n) {
     List<double> fibonacciNumbers = [0, 0.5, 1];
-    List<String> fibonacciStrings =
-        fibonacciNumbers.map((number) => number.toString()).toList();
+    List<String> fibonacciStrings = fibonacciNumbers
+        .map((number) => number == number.round()
+            ? number.toInt().toString()
+            : number.toString())
+        .toList();
     while (true) {
       double nextNumber = fibonacciNumbers[fibonacciNumbers.length - 1] +
           fibonacciNumbers[fibonacciNumbers.length - 2];
@@ -2150,8 +2248,9 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
       nextNumber = nextNumber.round().toDouble();
 
       fibonacciNumbers.add(nextNumber);
-      fibonacciStrings.add(nextNumber.toString());
+      fibonacciStrings.add(nextNumber.toInt().toString());
     }
+
     return fibonacciStrings;
   }
 
@@ -2272,8 +2371,8 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
     });
   }
 
-  Future<void> exitRoom(String exitedUser, String exiter) async {
-    // 退出させられた人と退出させた人の情報をFirestoreに保存
+  Future<void> exitRoom(String exitedUser, String exiter, bool blocked) async {
+    // 退室させられた人と退室させた人の情報をFirestoreに保存
     var exitDocs = await _firestore
         .collection('rooms')
         .doc(widget.roomID.toString())
@@ -2288,6 +2387,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
           .doc(exitDocs.docs.first.id)
           .update({
         'exiter': exiter,
+        'blocked': blocked,
       });
     } else {
       await _firestore
@@ -2297,10 +2397,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
           .add({
         'userName': exitedUser,
         'exiter': exiter,
+        'blocked': blocked,
       });
     }
 
-    // 退出させられた人の情報を削除
+    // 退室させられた人の情報を削除
     var userDocs = await _firestore
         .collection('rooms')
         .doc(widget.roomID.toString())
@@ -2322,7 +2423,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
   }
 
   // exiterを取得する関数
-  Future<String> getExiter(String exitedUser) async {
+  Future<List<Object>> getExiter(String exitedUser) async {
     final exitDocs = await _firestore
         .collection('rooms')
         .doc(widget.roomID.toString())
@@ -2331,9 +2432,12 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
         .get();
 
     if (exitDocs.docs.isNotEmpty) {
-      return exitDocs.docs.first.data()['exiter'] ?? '不明なプレイヤー';
+      return [
+        exitDocs.docs.first.data()['exiter'] ?? '不明なプレイヤー',
+        exitDocs.docs.first.data()['blocked'] ?? false,
+      ];
     } else {
-      return '不明なプレイヤー';
+      return ['不明なプレイヤー', false];
     }
   }
 
@@ -2375,72 +2479,60 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
     }
   }
 
-  // ユーザーの名前を変更する関数
-  Future<String> changeUserName(
-      String currentUserName, String newUserName) async {
-    // ユーザー名が変更されていない場合は、処理を終了
-    if (currentUserName == newUserName) {
-      print('ユーザー名変更なし。処理しない');
-      return '';
-    }
+  // 違反を報告した後の完了メッセージを表示する関数
+  void showReportCompleteMessage() {
+    print('showReportCompleteMessage');
+    showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('通知'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                  '違反を報告しました。',
+                  // style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+              child: Text(
+                '閉じる',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Color(0xFFFFFFFF),
+                    ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF4B39EF),
+                foregroundColor: Color(0xFFFFFFFF),
+                padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-    // 既に同じユーザー名が存在する場合は、エラーを出力して処理を終了
-    final userDocsForExistCheck = await _firestore
+  Future<void> saveForUserBlockString() async {
+    var roomSnapshot = await _firestore
         .collection('rooms')
         .doc(widget.roomID.toString())
-        .collection('users')
-        .where('userName', isEqualTo: newUserName)
         .get();
-    if (userDocsForExistCheck.docs.isNotEmpty) {
-      return '同名のユーザーが既に部屋にいます。重複しない名前に変更してください。';
-    }
 
-    if (currentUserName.isEmpty) {
-      return '不明なエラー：現在のユーザー名が空になっている、もしくは取得できませんでした。';
-    }
+    String forUserBlockString =
+        roomSnapshot.data()?['forUserBlockString'] ?? '';
 
-    // SharedPreferencesにユーザー名を保存
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('userName', newUserName);
-    await prefs.setString('storedUserName', newUserName);
-
-    // prefsUserNameを更新
-    setState(() {
-      initFuture = Future.wait([
-        roomScreenCheckRoomExists(),
-        checkUserName(false),
-        loadUserImage(),
-        checkPrefsUserImage(),
-      ]);
-    });
-
-    // Firestoreにユーザー情報を保存
-    var userDocsForUpdate = await _firestore
-        .collection('rooms')
-        .doc(widget.roomID.toString())
-        .collection('users')
-        .where('userName', isEqualTo: currentUserName)
-        .get();
-
-    if (userDocsForUpdate.docs.isNotEmpty) {
-      await _firestore
-          .collection('rooms')
-          .doc(widget.roomID.toString())
-          .collection('users')
-          .doc(userDocsForUpdate.docs.first.id)
-          .update({
-        'userName': newUserName,
-      });
-    }
-
-    // 直前のroomScreenCheckRoomExistsが非同期処理となっており、その実行中に以下のupdateが実行されると、lastActivityDateTimeが一瞬nullとなるため、roomScreenCheckRoomExistsを確実に終わらせてからupdateを実行するための遅延処理を行う
-    await Future.delayed(Duration(milliseconds: 100));
-
-    // ルームの最終アクティビティ日時を更新
-    await _firestore.collection('rooms').doc(widget.roomID.toString()).update({
-      'lastActivityDateTime': FieldValue.serverTimestamp(),
-    });
-
-    return '';
+    await prefs.setString('forUserBlockString', forUserBlockString);
   }
 }
