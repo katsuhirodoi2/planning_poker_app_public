@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:planning_poker_app/functions/room_common_functions.dart';
 import 'package:planning_poker_app/routes/my_router_delegate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:planning_poker_app/functions/user_image_common_functions.dart';
 import 'package:planning_poker_app/screens/image_change_bottom_sheet.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NameInputScreen extends StatefulWidget {
   @override
@@ -22,11 +24,25 @@ class _NameInputScreenState extends State<NameInputScreen> {
 
   late Future<List<Object>> prefsUserImageFutureList;
 
+  // Firestoreに接続するためのインスタンスを作成
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('名前を入力'),
+        leading: !kIsWeb
+            ? IconButton(
+                icon: Icon(Icons.arrow_back),
+                onPressed: () {
+                  // スマホ版のみ、戻るボタンを押したときにルートを "/" に設定する
+                  MyRouterDelegate routerDelegate =
+                      Router.of(context).routerDelegate as MyRouterDelegate;
+                  routerDelegate.setNewRoutePath('/');
+                },
+              )
+            : null,
       ),
       body: Stack(
         children: <Widget>[
@@ -191,9 +207,6 @@ class _NameInputScreenState extends State<NameInputScreen> {
     final prefs = await SharedPreferences.getInstance();
     String? roomID = prefs.getString('roomID');
 
-    // Firestoreに接続するためのインスタンスを作成
-    final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
     if (roomID == null || roomID.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -207,6 +220,15 @@ class _NameInputScreenState extends State<NameInputScreen> {
         ),
       );
     } else {
+      // 部屋でブロックされていないかチェック
+      bool isBlockUser = await checkBlockUser(roomID);
+      if (isBlockUser) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('この部屋には入室できません。')),
+        );
+        return;
+      }
+
       // 同じルームに同じユーザー名が存在しないかチェック
       final findUser = await _firestore
           .collection('rooms')
@@ -220,49 +242,69 @@ class _NameInputScreenState extends State<NameInputScreen> {
           SnackBar(content: Text('同名のユーザーが既に部屋にいます。重複しない名前に変更してください。')),
         );
       } else {
-        // 処理を開始する前にローディング状態をtrueに設定
-        setState(() {
-          _isLoading = true;
-        });
-
-        Uint8List imageData = await loadUserImageToUnit8List();
-
-        // 画像をアップロードしてURLを取得
-        var downloadUrl = await uploadImageAndSaveUrl(roomID, imageData);
-
-        // prefsに画像を保存
-        // await saveUserImage(_imageData.value);
-
-        // Firestoreにユーザー情報を保存
-        await _firestore
-            .collection('rooms')
-            .doc(roomID)
-            .collection('users')
-            .add({
-          'userName': userName,
-          'imageUrl': downloadUrl,
-        });
-
-        // SharedPreferencesにユーザー名を保存
-        await prefs.setString('userName', userName);
-        await prefs.setString('storedUserName', userName);
-
-        // ルームの最終アクティビティ日時を更新
-        await _firestore.collection('rooms').doc(roomID).update({
-          'lastActivityDateTime': FieldValue.serverTimestamp(),
-        });
-
-        // 処理が完了したらローディング状態をfalseに設定
-        setState(() {
-          _isLoading = false;
-        });
-
-        // ルームが存在する場合、ナビゲーションを行う
-        MyRouterDelegate routerDelegate =
-            Router.of(context).routerDelegate as MyRouterDelegate;
-        routerDelegate.setNewRoutePath('/room/$roomID');
+        // ここで、利用者のデバイスがiOSの場合のみ利用規約に同意しているかどうかを確認する処理を追加する
+        if (Theme.of(context).platform == TargetPlatform.iOS) {
+          bool isAgree = prefs.getBool('isAgree') ?? false;
+          if (isAgree == false) {
+            showEulaDialog(context).then((isAgree) {
+              if (isAgree == true) {
+                prefs.setBool('isAgree', true);
+                saveNameAndImageToFirestore(userName, roomID);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('利用規約に同意していないため、入室できません。')),
+                );
+              }
+            });
+          } else {
+            saveNameAndImageToFirestore(userName, roomID);
+          }
+        } else {
+          saveNameAndImageToFirestore(userName, roomID);
+        }
       }
     }
+  }
+
+  saveNameAndImageToFirestore(String userName, String roomID) async {
+    // 処理を開始する前にローディング状態をtrueに設定
+    setState(() {
+      _isLoading = true;
+    });
+
+    Uint8List imageData = await loadUserImageToUnit8List();
+
+    // 画像をアップロードしてURLを取得
+    var downloadUrl = await uploadImageAndSaveUrl(roomID, imageData);
+
+    // prefsに画像を保存
+    // await saveUserImage(_imageData.value);
+
+    // Firestoreにユーザー情報を保存
+    await _firestore.collection('rooms').doc(roomID).collection('users').add({
+      'userName': userName,
+      'imageUrl': downloadUrl,
+    });
+
+    // SharedPreferencesにユーザー名を保存
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userName', userName);
+    await prefs.setString('storedUserName', userName);
+
+    // ルームの最終アクティビティ日時を更新
+    await _firestore.collection('rooms').doc(roomID).update({
+      'lastActivityDateTime': FieldValue.serverTimestamp(),
+    });
+
+    // 処理が完了したらローディング状態をfalseに設定
+    setState(() {
+      _isLoading = false;
+    });
+
+    // ルームが存在する場合、ナビゲーションを行う
+    MyRouterDelegate routerDelegate =
+        Router.of(context).routerDelegate as MyRouterDelegate;
+    routerDelegate.setNewRoutePath('/room/$roomID');
   }
 
   // SharedPreferencesからuserImageを読み込み、Uint8Listに変換して返します
@@ -288,5 +330,101 @@ class _NameInputScreenState extends State<NameInputScreen> {
     if (storedUserName != null) {
       _nameController.text = storedUserName;
     }
+  }
+
+  Future<bool?> showEulaDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // ユーザーがダイアログ外をタップしてもダイアログが閉じないようにする
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('利用規約'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                  '''本利用規約（以下、「本規約」）は、プランニングポーカー（以下、「本アプリ」）の利用に関する条件を定めるものです。入室する前に、本規約をよくお読みください。入室することにより、ユーザーは本規約に同意したものとみなされます。
+
+第1条（適用）
+本規約は、本アプリの利用に関する一切の関係に適用されます。
+
+第2条（禁止事項）
+ユーザーは、本アプリの利用にあたり、以下の行為をしてはなりません。
+
+・法令または公序良俗に違反する行為
+・犯罪行為に関連する行為
+・本アプリのサーバーまたはネットワークの機能を破壊したり、妨害したりする行為
+・本アプリの運営を妨害するおそれのある行為
+・他のユーザーに関する個人情報等を収集または蓄積する行為
+・不正アクセスをし、またはこれを試みる行為
+・他のユーザーに成りすます行為
+・本アプリに関連して、反社会的勢力に対して直接または間接に利益を供与する行為
+・その他、本アプリが不適切と判断する行為
+
+第3条（保証の否認および免責事項）
+本アプリは、本アプリに事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定の目的適合性、セキュリティなどに関する欠陥、エラーやバグ、権利侵害などを含む）がないことを明示的にも黙示的にも保証しておりません。本アプリは、本アプリの利用により生じたあらゆる損害について、一切の責任を負いません。
+
+第4条（サービス内容の変更等）
+本アプリは、ユーザーへの事前の告知なく、本アプリの内容を変更し、または提供を中止することができます。本アプリは、これによってユーザーに生じた損害について一切の責任を負いません。
+
+第5条（利用規約の変更）
+本アプリは、必要と判断した場合には、ユーザーに通知することなく、いつでも本規約を変更することができます。
+
+第6条（個人情報の取扱い）
+本アプリの利用によって取得するユーザーの個人情報については、本アプリのプライバシーポリシーに従い適切に取り扱うものとします。
+
+第7条（権利義務の譲渡の禁止）
+ユーザーは、本アプリの書面による事前の承諾なく、利用契約上の地位または本規約に基づく権利もしくは義務を第三者に譲渡し、または担保に供することはできません。
+
+第8条（準拠法・裁判管轄）
+本規約の解釈にあたっては、日本法を準拠法とします。本アプリに関して紛争が生じた場合には、本アプリの所在地を管轄する裁判所を専属的合意管轄とします。''',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: Text(
+                '同意しない',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Color(0xFF4B39EF),
+                    ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFFFFFFFF),
+                foregroundColor: Color(0xFF4B39EF),
+                padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+              child: Text(
+                '同意する',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Color(0xFFFFFFFF),
+                    ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF4B39EF),
+                foregroundColor: Color(0xFFFFFFFF),
+                padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

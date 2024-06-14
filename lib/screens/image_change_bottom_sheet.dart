@@ -7,9 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:image_picker/image_picker.dart';
-import 'package:image_picker_web/image_picker_web.dart';
+import 'package:planning_poker_app/platform_functions_export.dart';
 
 class ImageChangeBottomSheet extends StatefulWidget {
   final prefsUserName;
@@ -227,31 +225,7 @@ class _ImageChangeBottomSheet extends State<ImageChangeBottomSheet> {
 
   // 画像を選択してUint8Listに変換します
   Future<Uint8List?> getImage() async {
-    Uint8List? imageData;
-    if (kIsWeb) {
-      try {
-        imageData = await ImagePickerWeb.getImageAsBytes();
-        if (imageData != null) {
-          // 作成したファイルをsaveImageに渡します
-          return imageData;
-        }
-      } catch (e) {
-        print(e);
-      }
-    } else {
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-      if (pickedFile != null) {
-        imageData = await pickedFile.readAsBytes();
-        // 作成したファイルをsaveImageに渡します
-        return imageData;
-      } else {
-        print('No image selected.');
-      }
-    }
-
-    return null;
+    return await PlatformFunctions().pickImage();
   }
 
   // 画像を選択してUint8Listに変換します
@@ -270,9 +244,7 @@ class _ImageChangeBottomSheet extends State<ImageChangeBottomSheet> {
 
   // 画像データをグローバル変数に保存します
   void loadImage(Uint8List imageData) {
-    //setState(() {
     _imageData.value = imageData;
-    //});
   }
 
   Future<void> saveImage(String userName) async {

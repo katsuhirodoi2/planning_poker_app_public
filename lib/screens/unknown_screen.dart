@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:html' as html;
-
+import 'package:planning_poker_app/platform_functions_export.dart';
 import 'package:planning_poker_app/routes/my_router_delegate.dart';
 
 class UnknownScreen extends StatefulWidget {
@@ -14,7 +13,7 @@ class _UnknownScreenState extends State<UnknownScreen> {
   @override
   Widget build(BuildContext context) {
     // ブラウザのタブに表示されるタイトルを設定
-    html.document.title = 'ページが見つかりません';
+    PlatformFunctions().setTitle('ページが見つかりません - プランニングポーカー');
 
     return Scaffold(
       appBar: AppBar(

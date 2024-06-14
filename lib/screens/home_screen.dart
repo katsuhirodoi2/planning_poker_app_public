@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:planning_poker_app/routes/my_router_delegate.dart';
 import 'dart:math';
-import 'dart:html' as html;
+import 'package:planning_poker_app/platform_functions_export.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:planning_poker_app/functions/room_common_functions.dart';
+import 'package:planning_poker_app/functions/common_functions.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -19,105 +20,97 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     // ブラウザのタブに表示されるタイトルを設定
-    html.document.title = 'プランニングポーカー';
+    PlatformFunctions().setTitle('プランニングポーカー');
 
-    return PopScope(
-        canPop: false,
-        onPopInvoked: (didPop) async {
-          //html.document.title = 'Home Screen';
-          return;
-        },
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text('プランニングポーカー'),
-          ),
-          body: Stack(
-            children: <Widget>[
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    SizedBox(
-                      height: 40,
-                      width: 120,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _isLoading = true;
-                          });
-                          createRoom(context);
-                        },
-                        child: Text(
-                          '部屋を作る',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: Color(0xFFFFFFFF),
-                                  ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF4B39EF),
-                          foregroundColor: Color(0xFFFFFFFF),
-                          padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('プランニングポーカー'),
+      ),
+      body: Stack(
+        children: <Widget>[
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                SizedBox(
+                  height: 40,
+                  width: 120,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                      });
+                      createRoom(context);
+                    },
+                    child: Text(
+                      '部屋を作る',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Color(0xFFFFFFFF),
                           ),
-                        ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF4B39EF),
+                      foregroundColor: Color(0xFFFFFFFF),
+                      padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    SizedBox(height: 20), // ボタン間のスペース
-                    Container(
-                      width: 200, // ここでテキストフィールドの幅を制限します
-                      child: TextField(
-                        controller: _roomIDController,
-                        decoration: InputDecoration(
-                          labelText: '部屋番号を入力',
-                          labelStyle: TextStyle(
-                            fontSize: 12, // フォントサイズを小さくする
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 20), // ボタン間のスペース
-                    SizedBox(
-                      height: 40,
-                      width: 120,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _isLoading = true;
-                          });
-                          joinRoom(context);
-                        },
-                        child: Text(
-                          '部屋に入る',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: Color(0xFFFFFFFF),
-                                  ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF4B39EF),
-                          foregroundColor: Color(0xFFFFFFFF),
-                          padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_isLoading)
-                Container(
-                  // color: Colors.black.withOpacity(0.5),
-                  child: Center(
-                    child: CircularProgressIndicator(),
                   ),
                 ),
-            ],
+                SizedBox(height: 20), // ボタン間のスペース
+                Container(
+                  width: 200, // ここでテキストフィールドの幅を制限します
+                  child: TextField(
+                    controller: _roomIDController,
+                    decoration: InputDecoration(
+                      labelText: '部屋番号を入力',
+                      labelStyle: TextStyle(
+                        fontSize: 12, // フォントサイズを小さくする
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 20), // ボタン間のスペース
+                SizedBox(
+                  height: 40,
+                  width: 120,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                      });
+                      joinRoom(context);
+                    },
+                    child: Text(
+                      '部屋に入る',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Color(0xFFFFFFFF),
+                          ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF4B39EF),
+                      foregroundColor: Color(0xFFFFFFFF),
+                      padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ));
+          if (_isLoading)
+            Container(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+        ],
+      ),
+    );
+    // ,);
   }
 
   // 部屋番号の総数
@@ -148,7 +141,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 部屋を作成する関数
   Future<void> createRoom(BuildContext context) async {
-    // List<Rooms> rooms = await getRooms();
     int roomID = await findAvailableRoom();
 
     if (roomID == -1) {
@@ -180,17 +172,21 @@ class _HomeScreenState extends State<HomeScreen> {
           .showSnackBar(SnackBar(content: Text(message)));
     } else {
       // 部屋を作成する処理
-      String currentOrigin = html.window.location.origin;
+      String currentOrigin = PlatformFunctions().getOrigin();
       String newRoomUrl = '$currentOrigin/room/$roomID';
 
       // Firestoreへの参照を作成
       FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+      // ユーザーブロック用のランダム文字列を作成
+      String forUserBlockString = generateRandomString(16, false);
 
       // 部屋の情報を保存する
       await firestore.collection('rooms').doc(roomID.toString()).set({
         'roomID': roomID,
         'lastActivityDateTime': FieldValue.serverTimestamp(),
         'resultVisible': false,
+        'forUserBlockString': forUserBlockString,
       });
 
       // 部屋の下のusersコレクションを取得
@@ -264,6 +260,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Router.of(context).routerDelegate as MyRouterDelegate;
         routerDelegate.setNewRoutePath('/nameInput');
       } else {
+        setState(() {
+          _isLoading = false;
+        });
         // ルームが存在しない場合、エラーメッセージを表示する
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('部屋番号${roomID}は作成されていません。')),

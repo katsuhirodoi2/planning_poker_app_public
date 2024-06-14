@@ -32,7 +32,7 @@ dependencies:
     sdk: flutter
   firebase_core: ^2.31.0
   url_strategy: ^0.2.0
-  cloud_firestore: ^4.16.0
+  cloud_firestore: ^4.17.4
   provider: ^6.0.1
   shared_preferences: ^2.0.8
   cached_network_image: ^3.0.0
@@ -41,14 +41,17 @@ dependencies:
   firebase_storage: ^11.7.5
   image_picker_web: ^3.1.1
   path_provider: ^2.0.5
+  firebase_analytics: ^10.10.6
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.6
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -171,3 +174,18 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
+
+# add flutter_native_splash
+flutter_native_splash:
+  color: "#fef8ff" # スプラッシュ画面の背景色
+  image: assets/images/Icon-512.png # 表示したい画像のパス
+  android: true
+  ios: true
+  ios_content_mode: center # 画像のコンテンツモードを指定
+  android_gravity: center # 画像の配置位置を指定
+
+# add flutter_launcher_icons
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/Icon-white-1024.png" # アイコン画像のパス
