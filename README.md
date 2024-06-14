@@ -1,8 +1,8 @@
 ## 本レポジトリ（プランニングポーカーアプリ）の利用方法
 
-### flutterプロジェクトの作成とレポジトリ上のファイルのコピー
+### 1. Flutterプロジェクトの作成とレポジトリ上のファイルのコピー
 
-1. ローカル端末にて、flutterプロジェクトを作成する
+1. ローカル端末にて、Flutterプロジェクトを作成する
 
 ```
  flutter create planning_poker_app
@@ -21,15 +21,17 @@
 
 
 
-### Firebaseプロジェクトを作成する
+### 2. Firebaseプロジェクトを作成する
 
 本アプリケーション用のFirebaseプロジェクトを作成する
 
-※作成方法はFirebaseのドキュメント等を参照ください。
+※大まかには、Firebaseプロジェクトを作成後、Firebase Database、Storage、Hostingを構築（開始）する
+
+※詳細な作成方法はFirebaseのドキュメント等を参照のこと
 
 #### FirebaseにAndroidアプリを登録する
 
-FirebaseのAndroidアプリ登録後、FirebaseのAndroidアプリの情報表示画面にある「SDKの手順を確認」するを開く
+FirebaseのAndroidアプリ登録後、FirebaseのAndroidアプリの情報表示画面にある「SDKの手順を確認する」を開く
 
 すると「Android アプリに Firebase を追加」の画面が開くので手順に従って対応する。
 
@@ -45,12 +47,13 @@ planning_poker_app/android/app/
 
 配下に置く
 
+
 3. Firebase SDKを追加する（「Android アプリに Firebase を追加」の画面に記載の手順を参考に対応する）
 
 
 #### FirebaseにAppleアプリを登録する
 
-FirebaseのAppleアプリ登録後、FirebaseのAppleアプリの情報表示画面にある「SDKの手順を確認」するを開く
+FirebaseのAppleアプリ登録後、FirebaseのAppleアプリの情報表示画面にある「SDKの手順を確認する」を開く
 
 すると「Apple アプリへの Firebase の追加」の画面が開くので手順に従って対応する。
 
@@ -66,10 +69,9 @@ planning_poker_app/ios/Runner/
 
 配下に置く
 
-3. Firebase SDKを追加する（「Apple アプリに Firebase を追加」の画面に記載の手順を参考に対応する）
+3. planning_poker_app/ios/Runner.xcworkspaceをXcodeで開き、File -> Add File to Runner...より「GoogleService-Info.plist」を選択し、Xcodeに「GoogleService-Info.plist」を追加する（認識させる）
 
-4. 初期化コードを追加する（「Apple アプリに Firebase を追加」の画面に記載の手順を参考に対応する）
-
+「Apple アプリに Firebase を追加」の画面に記載されている「Firebase SDKの追加」および「初期化コードの追加」の手順は実施不要である認識
 
 #### Firebaseにウェブアプリを登録する
 
@@ -77,7 +79,7 @@ Firebaseのウェブアプリ登録後、Firebaseのウェブアプリの情報�
 
 
 
-### Firebaseとの接続設定（main.dart）
+### 3. Firebaseとの接続設定（main.dart）
 
 planning_poker_app/lib/main.dart
 
@@ -97,7 +99,7 @@ planning_poker_app/lib/main.dart
 ```
 
 
-### Firebase StorageにCORSの設定をする
+### 4. Firebase StorageにCORSの設定をする
 
 ```
 設定する
@@ -111,11 +113,11 @@ gsutil cors get gs://xxxx.appspot.com
 
 
 
-### Web版アプリの環境構築とデプロイ方法
+### 5. Web版アプリの環境構築とデプロイ
 
 https://firebase.google.com/docs/hosting/frameworks/flutter?hl=ja
 
-を参考に対応する。なお、デプロイ前にプロジェクトルート直下にて、
+を参考に対応する。なお、デプロイ前にプロジェクトルート（planning_poker_app）直下にて、
 
 ```
 flutter build web
@@ -125,12 +127,28 @@ flutter build web
 
 
 
-### Androidアプリの設定とデプロイ
+### 6. Androidアプリの設定とデプロイ
 
 Androidアプリ用の調整は未実施（後日公開予定）
 
 
 
-### Appleアプリの設定とデプロイ
+### 7. Appleアプリの設定とデプロイ
 
-Appleアプリ用の調整は未実施（後日公開予定）
+1. プロジェクトルート直下にて、
+
+```
+flutter build ios --release
+```
+
+コマンドを実行する
+
+2. Xcodeにてアーカイブ処理を行う
+  
+XcodeのメニューからProduct -> Archiveを選択する。これにより、アーカイブプロセスが開始され、成功すると、Organizerウィンドウが表示される。
+
+3. Xcodeからストアにアップロードする
+
+Organizerウィンドウで作成したアーカイブを選択し、Distribute Appボタンをクリックする。次に、App Store Connectを選択し、アップロードプロセスを続行する。
+
+4. 以降の処理の記述は省略（Apple Store Connectでの操作になる）
