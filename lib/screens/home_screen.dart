@@ -178,15 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
       // Firestoreへの参照を作成
       FirebaseFirestore firestore = FirebaseFirestore.instance;
 
-      // ユーザーブロック用のランダム文字列を作成
-      String forUserBlockString = generateRandomString(16, false);
-
       // 部屋の情報を保存する
       await firestore.collection('rooms').doc(roomID.toString()).set({
         'roomID': roomID,
         'lastActivityDateTime': FieldValue.serverTimestamp(),
         'resultVisible': false,
-        'forUserBlockString': forUserBlockString,
       });
 
       // 部屋の下のusersコレクションを取得

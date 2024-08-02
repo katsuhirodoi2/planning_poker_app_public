@@ -53,7 +53,17 @@ class MyRouterDelegate extends RouterDelegate<String>
   }
 
   @override
+  Future<void> setInitialRoutePath(String path) async {
+    print('setInitialRoutePath called with path: $path');
+    if (navigationState.currentPath == '/') {
+      // 初期ルートが設定されていない場合のみ設定する
+      navigationState.setPath(path);
+    }
+  }
+
+  @override
   Future<void> setNewRoutePath(String path) async {
+    print("setNewRoutePath path: $path");
     navigationState.setPath(path);
     currentPath = path;
   }

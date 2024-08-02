@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:planning_poker_app/functions/common_functions.dart';
+import 'package:planning_poker_app/functions/platform_mobile_functions.dart';
 import 'package:planning_poker_app/functions/room_common_functions.dart';
 import 'package:planning_poker_app/routes/my_router_delegate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +31,8 @@ class _NameInputScreenState extends State<NameInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    PlatformFunctions().setTitle('名前を入力 - プランニングポーカー');
+
     return Scaffold(
       appBar: AppBar(
         title: Text('名前を入力'),
@@ -277,23 +281,27 @@ class _NameInputScreenState extends State<NameInputScreen> {
     // 画像をアップロードしてURLを取得
     var downloadUrl = await uploadImageAndSaveUrl(roomID, imageData);
 
-    // prefsに画像を保存
-    // await saveUserImage(_imageData.value);
-
-    // Firestoreにユーザー情報を保存
-    await _firestore.collection('rooms').doc(roomID).collection('users').add({
-      'userName': userName,
-      'imageUrl': downloadUrl,
-    });
-
     // SharedPreferencesにユーザー名を保存
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('userName', userName);
     await prefs.setString('storedUserName', userName);
 
-    // ルームの最終アクティビティ日時を更新
-    await _firestore.collection('rooms').doc(roomID).update({
-      'lastActivityDateTime': FieldValue.serverTimestamp(),
+    // SharedPreferencesのuserUniqueIDにデータが入っているかどうかをチェック
+    String? prefsUserUniqueID = prefs.getString('userUniqueID');
+    if (prefsUserUniqueID == null) {
+      prefsUserUniqueID = generateRandomString(16, false);
+      // userUniqueIDがnullの場合はランダムな文字列を生成して保存
+      await prefs.setString('userUniqueID', prefsUserUniqueID);
+    }
+    // SharedPreferencesのしばらく表示しない設定をクリア
+    await prefs.remove('doNotShowAgain');
+
+    // Firestoreにユーザー情報を保存
+    await _firestore.collection('rooms').doc(roomID).collection('users').add({
+      'userName': userName,
+      'imageUrl': downloadUrl,
+      'justLoggedIn': true,
+      'userUniqueID': prefsUserUniqueID,
     });
 
     // 処理が完了したらローディング状態をfalseに設定
