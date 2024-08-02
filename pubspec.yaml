@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.2+5
 
 environment:
   sdk: '>=3.3.3 <4.0.0'
@@ -42,6 +42,10 @@ dependencies:
   image_picker_web: ^3.1.1
   path_provider: ^2.0.5
   firebase_analytics: ^10.10.6
+  qr_flutter: ^4.1.0
+  uni_links: ^0.5.1
+  url_launcher: ^6.3.0
+  flutter_svg: ^2.0.10+1
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -138,6 +142,10 @@ flutter:
           weight: 900
   assets:
     - assets/images/default_face.png
+    - assets/images/appstore_black.svg
+    - assets/images/googleplaystore_black.svg
+    - assets/images/apple.png
+    - assets/images/android.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
@@ -183,9 +191,16 @@ flutter_native_splash:
   ios: true
   ios_content_mode: center # 画像のコンテンツモードを指定
   android_gravity: center # 画像の配置位置を指定
+  android_12: # android のスプラッシュスクリーン実装用に使用
+    # icon_background_color: "#fef8ff"
+    color: "#fef8ff"
+    image: assets/images/Icon-fef8ff-1152.png
 
 # add flutter_launcher_icons
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/images/Icon-white-1024.png" # アイコン画像のパス
+  image_path_ios: "assets/images/Icon-fef8ff-1024.png"
+  image_path_android: "assets/images/Icon-fef8ff-1024_main768_circle.png"
+  adaptive_icon_background: "#fef8ff"
+  adaptive_icon_foreground: "assets/images/Icon-fef8ff-1024_main512.png"

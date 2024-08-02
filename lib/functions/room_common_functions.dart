@@ -41,15 +41,19 @@ Future<bool> checkRoomExists(String roomID) async {
 
 Future<bool> checkBlockUser(String roomID) async {
   final firestore = FirebaseFirestore.instance;
-  var roomSnapshot = await firestore.collection('rooms').doc(roomID).get();
-
-  String forUserBlockString = roomSnapshot.data()?['forUserBlockString'] ?? '';
 
   final prefs = await SharedPreferences.getInstance();
-  String prefsForUserBlockString = prefs.getString('forUserBlockString') ?? '';
+  String prefsUserUniqueID = prefs.getString('userUniqueID') ?? '';
 
-  if (prefsForUserBlockString.isNotEmpty &&
-      prefsForUserBlockString == forUserBlockString) {
+  var exitsDocs = await firestore
+      .collection('rooms')
+      .doc(roomID)
+      .collection('exits')
+      .where('userUniqueID', isEqualTo: prefsUserUniqueID)
+      .get();
+
+  if (exitsDocs.docs.isNotEmpty &&
+      exitsDocs.docs.first.data()['blocked'] == true) {
     return true;
   } else {
     return false;

@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:planning_poker_app/models/card_counts_model.dart';
@@ -17,6 +18,9 @@ import 'package:planning_poker_app/screens/image_change_bottom_sheet.dart';
 import 'package:planning_poker_app/functions/room_common_functions.dart';
 import 'dart:async';
 import 'package:planning_poker_app/screens/report_user_bottom_sheet.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class RoomScreen extends StatefulWidget {
   final int roomID;
@@ -40,6 +44,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     PlatformFunctions().setTitle('部屋番号 ${widget.roomID} - プランニングポーカー');
+    print('RoomScreen: build');
 
     double drawAreaBorderWidthSum = 0;
     double drawInnerAreaBorderWidthSum = 0;
@@ -174,6 +179,17 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
       drawAreaWidth += marginLeftPlus; // ここ、見直し必要
     }
 
+    double qrCodeAreaLeftRightPadding = leftRightPaddingAndMargin;
+    double qRCodeRightPadding = 16;
+    double qrCodeSize = 64.0;
+    double storeBadgeHeight = 40;
+    if (screenWidth < 814 && screenWidth > 653) {
+      qrCodeAreaLeftRightPadding = 8;
+      qRCodeRightPadding = 8;
+      qrCodeSize = 48.0;
+      storeBadgeHeight = 32;
+    }
+
     return FutureBuilder<List<Object>>(
         future: initFuture,
         builder: (BuildContext context, AsyncSnapshot<List<Object>> snapshot) {
@@ -193,8 +209,8 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
             Image prefsUserImage = snapshot.data?[2] as Image;
             bool isExistPrefsUserImage = snapshot.data?[3] as bool;
             bool isBlockUser = snapshot.data?[4] as bool;
+            bool prefsDoNotShowAgain = snapshot.data?[5] as bool;
 
-            print('isBlockUser: $isBlockUser');
             if (isBlockUser) {
               return Stack(
                 alignment: Alignment.center,
@@ -267,698 +283,849 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
 
             // 部屋の存在チェックが完了した後の描画
             if (roomExists == true) {
-              if (!Provider.of<SelectedCardsModel>(context, listen: true)
-                  .selectedCards
-                  .containsKey(prefsUserName)) {
-                if (exiterFuture == null) {
-                  exiterFuture = getExiter(prefsUserName);
-                }
-                return FutureBuilder<List<Object>>(
-                  future: exiterFuture,
-                  builder: (BuildContext context,
-                      AsyncSnapshot<List<Object>> snapshot) {
-                    if (snapshot.connectionState == ConnectionState.done) {
-                      if (snapshot.hasError) {
-                        // エラーハンドリング
-                        return Text('エラー: ${snapshot.error}');
-                      } else {
-                        String exiter = snapshot.data?[0] as String;
-                        bool blocked = snapshot.data?[1] as bool;
-                        if (blocked) {
-                          saveForUserBlockString();
-                        }
-                        if (exiter != prefsUserName) {
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                color:
-                                    Theme.of(context).canvasColor, // テーマの背景色を使用
-                                width: MediaQuery.of(context).size.width,
-                                height: MediaQuery.of(context).size.height,
-                              ),
-                              AlertDialog(
-                                backgroundColor: Colors.white, // 背景色を白に設定
-                                shape: RoundedRectangleBorder(
-                                  // 縁の形状を設定
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: BorderSide(
-                                    color: Color(0xFFE0E3E7), // 縁の色を設定
-                                  ),
+              if (prefsUserName.isEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  navigateToNameInputScreen();
+                });
+                return Container();
+              } else {
+                if (!Provider.of<SelectedCardsModel>(context, listen: true)
+                    .selectedCards
+                    .containsKey(prefsUserName)) {
+                  if (exiterFuture == null) {
+                    exiterFuture = getExiter(prefsUserName);
+                  }
+                  return FutureBuilder<List<Object>>(
+                    future: exiterFuture,
+                    builder: (BuildContext context,
+                        AsyncSnapshot<List<Object>> snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        if (snapshot.hasError) {
+                          // エラーハンドリング
+                          return Text('エラー: ${snapshot.error}');
+                        } else {
+                          String exiter = snapshot.data?[0] as String;
+                          bool blocked = snapshot.data?[1] as bool;
+
+                          if (exiter != prefsUserName) {
+                            return Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  color: Theme.of(context)
+                                      .canvasColor, // テーマの背景色を使用
+                                  width: MediaQuery.of(context).size.width,
+                                  height: MediaQuery.of(context).size.height,
                                 ),
-                                title: Text('通知'),
-                                content: Text(
-                                    '${exiter}によって退室させられました'), // データが利用できるときはそのデータを表示
-                                actions: <Widget>[
-                                  SizedBox(
-                                    height: 40,
-                                    width: 104,
-                                    child: ElevatedButton(
-                                      onPressed: () async {
-                                        await deleteUserName();
-                                        await deleteExitedUser(prefsUserName);
-                                        MyRouterDelegate routerDelegate =
-                                            Router.of(context).routerDelegate
-                                                as MyRouterDelegate;
-                                        routerDelegate.setNewRoutePath('/');
-                                      },
-                                      child: Text(
-                                        "閉じる",
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleSmall
-                                            ?.copyWith(
-                                              color: Color(0xFFFFFFFF),
-                                            ),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color(0xFF4B39EF),
-                                        foregroundColor: Color(0xFFFFFFFF),
-                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                            16, 0, 16, 0),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                AlertDialog(
+                                  backgroundColor: Colors.white, // 背景色を白に設定
+                                  shape: RoundedRectangleBorder(
+                                    // 縁の形状を設定
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(
+                                      color: Color(0xFFE0E3E7), // 縁の色を設定
+                                    ),
+                                  ),
+                                  title: Text('通知'),
+                                  content: Text(
+                                      '${exiter}によって退室させられました'), // データが利用できるときはそのデータを表示
+                                  actions: <Widget>[
+                                    SizedBox(
+                                      height: 40,
+                                      width: 104,
+                                      child: ElevatedButton(
+                                        onPressed: () async {
+                                          if (!blocked) {
+                                            await deleteUserName();
+                                            await deleteExitedUser(
+                                                prefsUserName);
+                                          }
+                                          MyRouterDelegate routerDelegate =
+                                              Router.of(context).routerDelegate
+                                                  as MyRouterDelegate;
+                                          routerDelegate.setNewRoutePath('/');
+                                        },
+                                        child: Text(
+                                          "閉じる",
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                color: Color(0xFFFFFFFF),
+                                              ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Color(0xFF4B39EF),
+                                          foregroundColor: Color(0xFFFFFFFF),
+                                          padding:
+                                              EdgeInsetsDirectional.fromSTEB(
+                                                  16, 0, 16, 0),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          );
-                        } else {
-                          return FutureBuilder(
-                            future: Future.delayed(Duration.zero, () async {
-                              await deleteUserName();
-                              await deleteExitedUser(prefsUserName);
-                              MyRouterDelegate routerDelegate =
-                                  Router.of(context).routerDelegate
-                                      as MyRouterDelegate;
-                              routerDelegate.setNewRoutePath('/');
-                            }),
-                            builder:
-                                (BuildContext context, AsyncSnapshot snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return Scaffold(
-                                  body: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              } else {
-                                return Container(); // 何も表示しない
-                              }
-                            },
-                          );
+                                  ],
+                                ),
+                              ],
+                            );
+                          } else {
+                            return FutureBuilder(
+                              future: Future.delayed(Duration.zero, () async {
+                                await deleteUserName();
+                                await deleteExitedUser(prefsUserName);
+                                MyRouterDelegate routerDelegate =
+                                    Router.of(context).routerDelegate
+                                        as MyRouterDelegate;
+                                routerDelegate.setNewRoutePath('/');
+                              }),
+                              builder: (BuildContext context,
+                                  AsyncSnapshot snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return Scaffold(
+                                    body: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                } else {
+                                  return Container(); // 何も表示しない
+                                }
+                              },
+                            );
+                          }
                         }
+                      } else {
+                        return Scaffold(
+                          body: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
                       }
-                    } else {
-                      return Scaffold(
-                        body: Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
-                  },
-                );
-              } else {
-                return GestureDetector(
-                  child: Scaffold(
-                    body: SafeArea(
-                      top: true,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: EdgeInsetsDirectional.fromSTEB(
-                                leftRightPaddingAndMargin, 0, 0, 0),
-                            margin: EdgeInsets.only(left: marginAreaWidth),
-                            width: drawAreaWidth,
-                            // decoration: BoxDecoration(
-                            //   border: Border.all(
-                            //     color: Colors.red,
-                            //     width: drawAreaBorderWidthSum / 2,
-                            //   ),
-                            // ),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.max,
-                                children: [
-                                  Padding(
-                                    padding: EdgeInsetsDirectional.fromSTEB(
-                                        leftRightPaddingAndMargin,
-                                        screenWidth <=
-                                                ThemeProvider
-                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                            ? 0
-                                            : 16,
-                                        leftRightPaddingAndMargin,
-                                        0),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.max,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.max,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'プランニングポーカー',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .headlineMedium,
-                                              ),
-                                              Padding(
-                                                padding: EdgeInsetsDirectional
-                                                    .fromSTEB(0, 4, 0, 0),
-                                                child: Text(
-                                                    '部屋番号 ${widget.roomID}',
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .labelMedium),
-                                              ),
-                                            ],
+                    },
+                  );
+                } else {
+                  return GestureDetector(
+                    child: Scaffold(
+                      body: SafeArea(
+                        top: true,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: EdgeInsetsDirectional.fromSTEB(
+                                  leftRightPaddingAndMargin, 0, 0, 0),
+                              margin: EdgeInsets.only(left: marginAreaWidth),
+                              width: drawAreaWidth,
+                              // decoration: BoxDecoration(
+                              //   border: Border.all(
+                              //     color: Colors.red,
+                              //     width: drawAreaBorderWidthSum / 2,
+                              //   ),
+                              // ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.max,
+                                  children: [
+                                    Padding(
+                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                          leftRightPaddingAndMargin,
+                                          screenWidth <=
+                                                  ThemeProvider
+                                                      .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                              ? 0
+                                              : 16,
+                                          leftRightPaddingAndMargin,
+                                          0),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.max,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.max,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'プランニングポーカー',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .headlineMedium,
+                                                ),
+                                                Padding(
+                                                  padding: EdgeInsetsDirectional
+                                                      .fromSTEB(0, 4, 0, 0),
+                                                  child: Text(
+                                                      '部屋番号 ${widget.roomID}',
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .labelMedium),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        Padding(
-                                          padding:
-                                              EdgeInsetsDirectional.fromSTEB(
-                                                  leftRightPaddingAndMargin,
-                                                  12,
-                                                  leftRightPaddingAndMargin,
-                                                  12),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.max,
-                                            children: [
-                                              PopupMenuButton(
-                                                offset: Offset(
-                                                    0,
-                                                    myIconSize +
-                                                        12), // メニューの表示位置を調整
-                                                icon: Container(
-                                                  width: myIconSize,
-                                                  height: myIconSize,
-                                                  decoration: BoxDecoration(
-                                                    color: Color(0x4C4B39EF),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                    border: Border.all(
-                                                      color: Color(
-                                                          0xFF4B39EF), // 縁取りの色
-                                                      width: 2, // 縁取りの幅
-                                                    ),
-                                                  ),
-                                                  child: Padding(
-                                                    padding: EdgeInsets.all(2),
-                                                    child: ClipRRect(
+                                          Padding(
+                                            padding:
+                                                EdgeInsetsDirectional.fromSTEB(
+                                                    leftRightPaddingAndMargin,
+                                                    12,
+                                                    leftRightPaddingAndMargin,
+                                                    12),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.max,
+                                              children: [
+                                                PopupMenuButton(
+                                                  offset: Offset(
+                                                      0,
+                                                      myIconSize +
+                                                          12), // メニューの表示位置を調整
+                                                  icon: Container(
+                                                    width: myIconSize,
+                                                    height: myIconSize,
+                                                    decoration: BoxDecoration(
+                                                      color: Color(0x4C4B39EF),
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              8),
-                                                      child: prefsUserImage,
+                                                              12),
+                                                      border: Border.all(
+                                                        color: Color(
+                                                            0xFF4B39EF), // 縁取りの色
+                                                        width: 2, // 縁取りの幅
+                                                      ),
+                                                    ),
+                                                    child: Padding(
+                                                      padding:
+                                                          EdgeInsets.all(2),
+                                                      child: ClipRRect(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                        child: prefsUserImage,
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                                itemBuilder:
-                                                    (BuildContext context) {
-                                                  List<PopupMenuEntry>
-                                                      menuItems = [
-                                                    PopupMenuItem(
-                                                      value: 'changeUserImage',
-                                                      child: Text('アイコンを変更する',
-                                                          style:
-                                                              Theme.of(context)
-                                                                  .textTheme
-                                                                  .labelMedium),
-                                                    ),
-                                                  ];
-                                                  // 特定の条件が満たされたときにのみ、'deleteUserImage' メニューアイテムを追加
-                                                  if (isExistPrefsUserImage) {
-                                                    menuItems.add(
+                                                  itemBuilder:
+                                                      (BuildContext context) {
+                                                    List<PopupMenuEntry>
+                                                        menuItems = [
                                                       PopupMenuItem(
                                                         value:
-                                                            'deleteUserImage',
-                                                        child: Text('アイコンを削除する',
+                                                            'changeUserImage',
+                                                        child: Text('アイコンを変更する',
                                                             style: Theme.of(
                                                                     context)
                                                                 .textTheme
                                                                 .labelMedium),
                                                       ),
-                                                    );
-                                                  }
-                                                  if (isOneColumn) {
-                                                    menuItems.add(
-                                                      PopupMenuItem(
-                                                        value: 'changeUserName',
-                                                        child: Text('名前を変更する',
-                                                            style: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .labelMedium),
-                                                      ),
-                                                    );
-                                                    menuItems.add(
-                                                      PopupMenuItem(
-                                                        value: 'leavingTheRoom',
-                                                        child: Text('退室する',
-                                                            style: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .labelMedium),
-                                                      ),
-                                                    );
-                                                  }
-                                                  return menuItems;
-                                                },
-                                                onSelected: (value) async {
-                                                  if (value ==
-                                                      'changeUserName') {
-                                                    showModalBottomSheet(
-                                                      context: context,
-                                                      builder: (BuildContext
-                                                          context) {
-                                                        return NameChangeBottomSheet(
-                                                          prefsUserName:
-                                                              prefsUserName,
-                                                          roomID: widget.roomID
-                                                              .toString(),
-                                                          onUserNameChanged:
-                                                              () {
-                                                            setState(() {
-                                                              initFuture =
-                                                                  Future.wait([
-                                                                roomScreenCheckRoomExists(),
-                                                                checkUserName(
-                                                                    false),
-                                                                loadUserImage(),
-                                                                checkPrefsUserImage(),
-                                                                checkBlockUser(
-                                                                    widget
-                                                                        .roomID
-                                                                        .toString()),
-                                                              ]);
-                                                            });
-                                                          },
-                                                        );
-                                                      },
-                                                    );
-                                                  } else if (value ==
-                                                      'leavingTheRoom') {
-                                                    exitRoom(prefsUserName,
-                                                        prefsUserName, false);
-                                                  } else {
+                                                    ];
+                                                    // 特定の条件が満たされたときにのみ、'deleteUserImage' メニューアイテムを追加
+                                                    if (isExistPrefsUserImage) {
+                                                      menuItems.add(
+                                                        PopupMenuItem(
+                                                          value:
+                                                              'deleteUserImage',
+                                                          child: Text(
+                                                              'アイコンを削除する',
+                                                              style: Theme.of(
+                                                                      context)
+                                                                  .textTheme
+                                                                  .labelMedium),
+                                                        ),
+                                                      );
+                                                    }
+                                                    if (isOneColumn) {
+                                                      menuItems.add(
+                                                        PopupMenuItem(
+                                                          value:
+                                                              'changeUserName',
+                                                          child: Text('名前を変更する',
+                                                              style: Theme.of(
+                                                                      context)
+                                                                  .textTheme
+                                                                  .labelMedium),
+                                                        ),
+                                                      );
+                                                      menuItems.add(
+                                                        PopupMenuItem(
+                                                          value:
+                                                              'leavingTheRoom',
+                                                          child: Text('退室する',
+                                                              style: Theme.of(
+                                                                      context)
+                                                                  .textTheme
+                                                                  .labelMedium),
+                                                        ),
+                                                      );
+                                                    }
+                                                    return menuItems;
+                                                  },
+                                                  onSelected: (value) async {
                                                     if (value ==
-                                                        'changeUserImage') {
-                                                      await showModalBottomSheet(
+                                                        'changeUserName') {
+                                                      showModalBottomSheet(
                                                         context: context,
                                                         builder: (BuildContext
                                                             context) {
-                                                          return ImageChangeBottomSheet(
+                                                          return NameChangeBottomSheet(
                                                             prefsUserName:
                                                                 prefsUserName,
                                                             roomID: widget
                                                                 .roomID
                                                                 .toString(),
-                                                            initialImage:
-                                                                prefsUserImage,
-                                                            isSaveServer: true,
+                                                            onUserNameChanged:
+                                                                () {
+                                                              setState(() {
+                                                                initFuture =
+                                                                    Future
+                                                                        .wait([
+                                                                  roomScreenCheckRoomExists(),
+                                                                  checkUserName(
+                                                                      false),
+                                                                  loadUserImage(),
+                                                                  checkPrefsUserImage(),
+                                                                  checkBlockUser(
+                                                                      widget
+                                                                          .roomID
+                                                                          .toString()),
+                                                                  getDoNotShowAgainPreference(),
+                                                                ]);
+                                                              });
+                                                            },
                                                           );
                                                         },
                                                       );
                                                     } else if (value ==
-                                                        'deleteUserImage') {
-                                                      await deleteUserImage();
-                                                      await deleteUserImageUrl(
-                                                          prefsUserName);
+                                                        'leavingTheRoom') {
+                                                      exitRoom(prefsUserName,
+                                                          prefsUserName, false);
+                                                    } else {
+                                                      if (value ==
+                                                          'changeUserImage') {
+                                                        await showModalBottomSheet(
+                                                          context: context,
+                                                          builder: (BuildContext
+                                                              context) {
+                                                            return ImageChangeBottomSheet(
+                                                              prefsUserName:
+                                                                  prefsUserName,
+                                                              roomID: widget
+                                                                  .roomID
+                                                                  .toString(),
+                                                              initialImage:
+                                                                  prefsUserImage,
+                                                              isSaveServer:
+                                                                  true,
+                                                            );
+                                                          },
+                                                        );
+                                                      } else if (value ==
+                                                          'deleteUserImage') {
+                                                        await deleteUserImage();
+                                                        await deleteUserImageUrl(
+                                                            prefsUserName);
+                                                      }
+                                                      setState(() {
+                                                        initFuture =
+                                                            Future.wait([
+                                                          roomScreenCheckRoomExists(),
+                                                          checkUserName(true),
+                                                          loadUserImage(),
+                                                          checkPrefsUserImage(),
+                                                          checkBlockUser(widget
+                                                              .roomID
+                                                              .toString()),
+                                                          getDoNotShowAgainPreference(),
+                                                        ]);
+                                                      });
                                                     }
-                                                    setState(() {
-                                                      initFuture = Future.wait([
-                                                        roomScreenCheckRoomExists(),
-                                                        checkUserName(true),
-                                                        loadUserImage(),
-                                                        checkPrefsUserImage(),
-                                                        checkBlockUser(widget
-                                                            .roomID
-                                                            .toString()),
-                                                      ]);
-                                                    });
+                                                  },
+                                                ),
+                                                isOneColumn
+                                                    ? Container()
+                                                    : Container(
+                                                        constraints:
+                                                            BoxConstraints(
+                                                          minWidth: 96,
+                                                          maxWidth: min(
+                                                              max(
+                                                                  screenWidth *
+                                                                      0.3,
+                                                                  96),
+                                                              192),
+                                                        ),
+                                                        padding:
+                                                            EdgeInsetsDirectional
+                                                                // .fromSTEB(4, 0, 0, 0),
+                                                                .fromSTEB(
+                                                                    0, 0, 0, 0),
+                                                        child: Column(
+                                                          // mainAxisSize: MainAxisSize.max,
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            Transform.translate(
+                                                              offset: Offset(
+                                                                  prefsUserNameTextPainter
+                                                                              .size
+                                                                              .width <
+                                                                          12
+                                                                      ? -12.0
+                                                                      : prefsUserNameTextPainter.size.width <
+                                                                              24
+                                                                          ? -8.0
+                                                                          : -6.0,
+                                                                  8.0),
+                                                              child:
+                                                                  PopupMenuButton(
+                                                                offset: Offset(
+                                                                  0,
+                                                                  prefsUserNameTextPainter
+                                                                          .size
+                                                                          .height +
+                                                                      24,
+                                                                ), // メニューの表示位置を調整
+                                                                icon: Container(
+                                                                  child: Text(
+                                                                    prefsUserName,
+                                                                    style:
+                                                                        prefsUserNameStyle,
+                                                                  ),
+                                                                ),
+                                                                itemBuilder:
+                                                                    (BuildContext
+                                                                        context) {
+                                                                  List<PopupMenuEntry>
+                                                                      menuItems =
+                                                                      [
+                                                                    PopupMenuItem(
+                                                                      value:
+                                                                          'changeUserName',
+                                                                      child: Text(
+                                                                          '名前を変更する',
+                                                                          style: Theme.of(context)
+                                                                              .textTheme
+                                                                              .labelMedium),
+                                                                    ),
+                                                                  ];
+                                                                  return menuItems;
+                                                                },
+                                                                onSelected:
+                                                                    (value) async {
+                                                                  if (value ==
+                                                                      'changeUserName') {
+                                                                    showModalBottomSheet(
+                                                                      context:
+                                                                          context,
+                                                                      builder:
+                                                                          (BuildContext
+                                                                              context) {
+                                                                        return NameChangeBottomSheet(
+                                                                          prefsUserName:
+                                                                              prefsUserName,
+                                                                          roomID: widget
+                                                                              .roomID
+                                                                              .toString(),
+                                                                          onUserNameChanged:
+                                                                              () {
+                                                                            setState(() {
+                                                                              initFuture = Future.wait([
+                                                                                roomScreenCheckRoomExists(),
+                                                                                checkUserName(false),
+                                                                                loadUserImage(),
+                                                                                checkPrefsUserImage(),
+                                                                                checkBlockUser(widget.roomID.toString()),
+                                                                                getDoNotShowAgainPreference(),
+                                                                              ]);
+                                                                            });
+                                                                          },
+                                                                        );
+                                                                      },
+                                                                    );
+                                                                  }
+                                                                },
+                                                              ),
+                                                            ),
+                                                            Transform.translate(
+                                                              offset: Offset(
+                                                                  -4.0, -8.0),
+                                                              child: TextButton(
+                                                                onPressed: () {
+                                                                  exitRoom(
+                                                                      prefsUserName,
+                                                                      prefsUserName,
+                                                                      false);
+                                                                },
+                                                                style:
+                                                                    ButtonStyle(
+                                                                  padding:
+                                                                      WidgetStateProperty
+                                                                          .all<
+                                                                              EdgeInsetsGeometry>(
+                                                                    EdgeInsetsDirectional
+                                                                        .fromSTEB(
+                                                                            4,
+                                                                            0,
+                                                                            4,
+                                                                            0),
+                                                                  ),
+                                                                  backgroundColor:
+                                                                      WidgetStateProperty
+                                                                          .resolveWith<
+                                                                              Color?>(
+                                                                    (Set<WidgetState>
+                                                                        states) {
+                                                                      if (states
+                                                                          .contains(
+                                                                              WidgetState.hovered))
+                                                                        return Color(
+                                                                            0x80EBEBEB); // ホバー時の背景色
+                                                                      return null; // ホバーしていないときの背景色（無し）
+                                                                    },
+                                                                  ),
+                                                                  shape: WidgetStateProperty
+                                                                      .all<
+                                                                          RoundedRectangleBorder>(
+                                                                    RoundedRectangleBorder(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              16), // 四隅の丸みの半径を設定
+                                                                      side: BorderSide
+                                                                          .none,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  '退室する',
+                                                                  style: Theme.of(
+                                                                          context)
+                                                                      .textTheme
+                                                                      .labelMedium,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Align(
+                                      alignment: AlignmentDirectional(-1, 0),
+                                      child: Container(
+                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                            0, 0, leftRightPaddingAndMargin, 0),
+                                        width: 732,
+                                        // decoration: BoxDecoration(
+                                        //   border: Border.all(
+                                        //     color: Colors.blue,
+                                        //     width: drawInnerAreaBorderWidthSum / 2,
+                                        //   ),
+                                        // ),
+                                        child: Wrap(
+                                          alignment: screenWidth <=
+                                                  ThemeProvider
+                                                      .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                              ? WrapAlignment.center
+                                              : WrapAlignment
+                                                  .start, // ボタンの配置を制御
+                                          spacing: screenWidth <=
+                                                  ThemeProvider
+                                                      .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                              ? 8
+                                              : 16, // ボタン間のスペース
+                                          runSpacing: 16, // 行間のスペース
+                                          children:
+                                              cardNumbers.map((cardNumber) {
+                                            return SizedBox(
+                                              height: screenWidth <=
+                                                      ThemeProvider
+                                                          .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                  ? 32
+                                                  : 40,
+                                              width: screenWidth <=
+                                                      ThemeProvider
+                                                          .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                  ? 64
+                                                  : 104,
+                                              child: ElevatedButton(
+                                                onPressed: () async {
+                                                  await saveUserCardSelection(
+                                                      prefsUserName,
+                                                      cardNumber);
+                                                  await updateLastActivityDateTime();
+                                                  var isResultVisibleModel =
+                                                      Provider.of<
+                                                              IsResultVisibleModel>(
+                                                          context,
+                                                          listen: false);
+                                                  if (isResultVisibleModel
+                                                      .resultVisible) {
+                                                    calculateCardCounts();
                                                   }
                                                 },
+                                                child: Text(
+                                                  screenWidth <=
+                                                          ThemeProvider
+                                                              .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                      ? "${cardNumber} p"
+                                                      : "${cardNumber} point${double.parse(cardNumber) > 1 ? 's' : ''}",
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        color:
+                                                            Color(0xFFFFFFFF),
+                                                        fontFamily:
+                                                            "Readex Pro",
+                                                      ),
+                                                ),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      Color(0xFF4B39EF),
+                                                  foregroundColor:
+                                                      Color(0xFFFFFFFF),
+                                                  padding: EdgeInsetsDirectional
+                                                      .fromSTEB(16, 0, 16, 0),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                  ),
+                                                ),
                                               ),
-                                              isOneColumn
-                                                  ? Container()
-                                                  : Container(
-                                                      constraints:
-                                                          BoxConstraints(
-                                                        minWidth: 96,
-                                                        maxWidth: min(
-                                                            max(
-                                                                screenWidth *
-                                                                    0.3,
-                                                                96),
-                                                            192),
-                                                      ),
-                                                      padding: EdgeInsetsDirectional
-                                                          // .fromSTEB(4, 0, 0, 0),
-                                                          .fromSTEB(0, 0, 0, 0),
-                                                      child: Column(
-                                                        // mainAxisSize: MainAxisSize.max,
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          Transform.translate(
-                                                            offset: Offset(
-                                                                prefsUserNameTextPainter
-                                                                            .size
-                                                                            .width <
-                                                                        12
-                                                                    ? -12.0
-                                                                    : prefsUserNameTextPainter.size.width <
-                                                                            24
-                                                                        ? -8.0
-                                                                        : -6.0,
-                                                                8.0),
-                                                            child:
-                                                                PopupMenuButton(
-                                                              offset: Offset(
-                                                                0,
-                                                                prefsUserNameTextPainter
-                                                                        .size
-                                                                        .height +
-                                                                    24,
-                                                              ), // メニューの表示位置を調整
-                                                              icon: Container(
-                                                                child: Text(
-                                                                  prefsUserName,
-                                                                  style:
-                                                                      prefsUserNameStyle,
-                                                                ),
-                                                              ),
-                                                              itemBuilder:
-                                                                  (BuildContext
-                                                                      context) {
-                                                                List<PopupMenuEntry>
-                                                                    menuItems =
-                                                                    [
-                                                                  PopupMenuItem(
-                                                                    value:
-                                                                        'changeUserName',
-                                                                    child: Text(
-                                                                        '名前を変更する',
-                                                                        style: Theme.of(context)
-                                                                            .textTheme
-                                                                            .labelMedium),
-                                                                  ),
-                                                                ];
-                                                                return menuItems;
-                                                              },
-                                                              onSelected:
-                                                                  (value) async {
-                                                                if (value ==
-                                                                    'changeUserName') {
-                                                                  showModalBottomSheet(
-                                                                    context:
-                                                                        context,
-                                                                    builder:
-                                                                        (BuildContext
-                                                                            context) {
-                                                                      return NameChangeBottomSheet(
-                                                                        prefsUserName:
-                                                                            prefsUserName,
-                                                                        roomID: widget
-                                                                            .roomID
-                                                                            .toString(),
-                                                                        onUserNameChanged:
-                                                                            () {
-                                                                          setState(
-                                                                              () {
-                                                                            initFuture =
-                                                                                Future.wait([
-                                                                              roomScreenCheckRoomExists(),
-                                                                              checkUserName(false),
-                                                                              loadUserImage(),
-                                                                              checkPrefsUserImage(),
-                                                                              checkBlockUser(widget.roomID.toString()),
-                                                                            ]);
-                                                                          });
-                                                                        },
-                                                                      );
-                                                                    },
-                                                                  );
-                                                                }
-                                                              },
-                                                            ),
-                                                          ),
-                                                          Transform.translate(
-                                                            offset: Offset(
-                                                                -4.0, -8.0),
-                                                            child: TextButton(
-                                                              onPressed: () {
-                                                                exitRoom(
-                                                                    prefsUserName,
-                                                                    prefsUserName,
-                                                                    false);
-                                                              },
-                                                              style:
-                                                                  ButtonStyle(
-                                                                padding:
-                                                                    WidgetStateProperty
-                                                                        .all<
-                                                                            EdgeInsetsGeometry>(
-                                                                  EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          4,
-                                                                          0,
-                                                                          4,
-                                                                          0),
-                                                                ),
-                                                                backgroundColor:
-                                                                    WidgetStateProperty
-                                                                        .resolveWith<
-                                                                            Color?>(
-                                                                  (Set<WidgetState>
-                                                                      states) {
-                                                                    if (states.contains(
-                                                                        WidgetState
-                                                                            .hovered))
-                                                                      return Color(
-                                                                          0x80EBEBEB); // ホバー時の背景色
-                                                                    return null; // ホバーしていないときの背景色（無し）
-                                                                  },
-                                                                ),
-                                                                shape: WidgetStateProperty
-                                                                    .all<
-                                                                        RoundedRectangleBorder>(
-                                                                  RoundedRectangleBorder(
-                                                                    borderRadius:
-                                                                        BorderRadius.circular(
-                                                                            16), // 四隅の丸みの半径を設定
-                                                                    side: BorderSide
-                                                                        .none,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              child: Text(
-                                                                '退室する',
-                                                                style: Theme.of(
-                                                                        context)
-                                                                    .textTheme
-                                                                    .labelMedium,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                            ],
-                                          ),
+                                            );
+                                          }).toList(),
                                         ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  Align(
-                                    alignment: AlignmentDirectional(-1, 0),
-                                    child: Container(
-                                      padding: EdgeInsetsDirectional.fromSTEB(
-                                          0, 0, leftRightPaddingAndMargin, 0),
-                                      width: 732,
+                                    Container(
                                       // decoration: BoxDecoration(
                                       //   border: Border.all(
-                                      //     color: Colors.blue,
+                                      //     color: Colors.green,
                                       //     width: drawInnerAreaBorderWidthSum / 2,
                                       //   ),
                                       // ),
+                                      width: drawAreaWidth,
                                       child: Wrap(
-                                        alignment: screenWidth <=
-                                                ThemeProvider
-                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                            ? WrapAlignment.center
-                                            : WrapAlignment.start, // ボタンの配置を制御
-                                        spacing: screenWidth <=
-                                                ThemeProvider
-                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                            ? 8
-                                            : 16, // ボタン間のスペース
-                                        runSpacing: 16, // 行間のスペース
-                                        children: cardNumbers.map((cardNumber) {
-                                          return SizedBox(
-                                            height: screenWidth <=
-                                                    ThemeProvider
-                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                ? 32
-                                                : 40,
-                                            width: screenWidth <=
-                                                    ThemeProvider
-                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                ? 64
-                                                : 104,
-                                            child: ElevatedButton(
-                                              onPressed: () async {
-                                                await saveUserCardSelection(
-                                                    prefsUserName, cardNumber);
-                                                await updateLastActivityDateTime();
-                                                var isResultVisibleModel =
-                                                    Provider.of<
+                                        children: [
+                                          Container(
+                                            width: leftAreaWidth,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.max,
+                                              children: [
+                                                Consumer<SelectedCardsModel>(
+                                                  builder: (context,
+                                                      selectedCardModel,
+                                                      child) {
+                                                    return Consumer<
+                                                        CardCountsModel>(
+                                                      builder: (context,
+                                                          cardCountsModel,
+                                                          child) {
+                                                        return Consumer<
                                                             IsResultVisibleModel>(
-                                                        context,
-                                                        listen: false);
-                                                if (isResultVisibleModel
-                                                    .resultVisible) {
-                                                  calculateCardCounts();
-                                                }
-                                              },
-                                              child: Text(
-                                                screenWidth <=
-                                                        ThemeProvider
-                                                            .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                    ? "${cardNumber} p"
-                                                    : "${cardNumber} point${double.parse(cardNumber) > 1 ? 's' : ''}",
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleSmall
-                                                    ?.copyWith(
-                                                      color: Color(0xFFFFFFFF),
-                                                      fontFamily: "Readex Pro",
-                                                    ),
-                                              ),
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor:
-                                                    Color(0xFF4B39EF),
-                                                foregroundColor:
-                                                    Color(0xFFFFFFFF),
-                                                padding: EdgeInsetsDirectional
-                                                    .fromSTEB(16, 0, 16, 0),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    // decoration: BoxDecoration(
-                                    //   border: Border.all(
-                                    //     color: Colors.green,
-                                    //     width: drawInnerAreaBorderWidthSum / 2,
-                                    //   ),
-                                    // ),
-                                    width: drawAreaWidth,
-                                    child: Wrap(
-                                      children: [
-                                        Container(
-                                          width: leftAreaWidth,
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.max,
-                                            children: [
-                                              Consumer<SelectedCardsModel>(
-                                                builder: (context,
-                                                    selectedCardModel, child) {
-                                                  return Consumer<
-                                                      CardCountsModel>(
-                                                    builder: (context,
-                                                        cardCountsModel,
-                                                        child) {
-                                                      return Consumer<
-                                                          IsResultVisibleModel>(
-                                                        builder: (context,
-                                                            isResultVisibleModel,
-                                                            child) {
-                                                          var entries =
-                                                              cardCountsModel
-                                                                  .cardCounts
-                                                                  .entries
-                                                                  .toList();
-                                                          entries.sort((a, b) {
-                                                            var compare = b
-                                                                .value
-                                                                .compareTo(
-                                                                    a.value);
-                                                            if (compare != 0)
-                                                              return compare;
-                                                            return b.key
-                                                                .compareTo(
-                                                                    a.key);
-                                                          });
-                                                          // 最大得票数を見つける
-                                                          int maxVotes = entries
-                                                                  .isNotEmpty
-                                                              ? entries
-                                                                  .map((e) =>
-                                                                      e.value)
-                                                                  .reduce((value,
-                                                                          element) =>
-                                                                      value > element
-                                                                          ? value
-                                                                          : element)
-                                                              : 0; // リストが空の場合は0を返す
-                                                          List<Widget> widgets =
-                                                              [];
-                                                          for (var i = 0;
-                                                              i <
-                                                                  entries
-                                                                      .length;
-                                                              i++) {
-                                                            if (!isResultVisibleModel
+                                                          builder: (context,
+                                                              isResultVisibleModel,
+                                                              child) {
+                                                            var entries =
+                                                                cardCountsModel
+                                                                    .cardCounts
+                                                                    .entries
+                                                                    .toList();
+                                                            entries
+                                                                .sort((a, b) {
+                                                              var compare = b
+                                                                  .value
+                                                                  .compareTo(
+                                                                      a.value);
+                                                              if (compare != 0)
+                                                                return compare;
+                                                              return b.key
+                                                                  .compareTo(
+                                                                      a.key);
+                                                            });
+                                                            // 最大得票数を見つける
+                                                            int maxVotes = entries
+                                                                    .isNotEmpty
+                                                                ? entries
+                                                                    .map((e) =>
+                                                                        e.value)
+                                                                    .reduce((value,
+                                                                            element) =>
+                                                                        value > element
+                                                                            ? value
+                                                                            : element)
+                                                                : 0; // リストが空の場合は0を返す
+
+                                                            if (isResultVisibleModel
                                                                 .resultVisible) {
-                                                              continue;
-                                                            }
-                                                            var entry =
-                                                                entries[i];
-                                                            EdgeInsetsDirectional cardCountsContainerMargin = i ==
-                                                                    0
-                                                                ? EdgeInsetsDirectional
-                                                                    .fromSTEB(
+                                                              List<Widget>
+                                                                  widgets = [];
+
+                                                              for (var i = 0;
+                                                                  i <
+                                                                      entries
+                                                                          .length;
+                                                                  i++) {
+                                                                var entry =
+                                                                    entries[i];
+                                                                EdgeInsetsDirectional cardCountsContainerMargin = i ==
+                                                                        0
+                                                                    ? EdgeInsetsDirectional.fromSTEB(
                                                                         0,
                                                                         16,
                                                                         leftRightPaddingAndMargin +
                                                                             marginLeftPlus,
                                                                         0)
-                                                                : EdgeInsetsDirectional
-                                                                    .fromSTEB(
+                                                                    : EdgeInsetsDirectional.fromSTEB(
                                                                         0,
                                                                         8,
                                                                         leftRightPaddingAndMargin +
                                                                             marginLeftPlus,
                                                                         0);
-                                                            widgets.add(
-                                                              Container(
-                                                                margin:
-                                                                    cardCountsContainerMargin,
+                                                                widgets.add(
+                                                                  Container(
+                                                                    margin:
+                                                                        cardCountsContainerMargin,
+                                                                    width: double
+                                                                        .infinity,
+                                                                    height: 80,
+                                                                    constraints:
+                                                                        BoxConstraints(
+                                                                      maxWidth:
+                                                                          leftAreaWidth,
+                                                                    ),
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: Colors
+                                                                          .white,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              8),
+                                                                      border:
+                                                                          Border
+                                                                              .all(
+                                                                        color: Color(
+                                                                            0xFFE0E3E7),
+                                                                        width:
+                                                                            1,
+                                                                      ),
+                                                                    ),
+                                                                    child:
+                                                                        Padding(
+                                                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                                                          leftRightPaddingAndMargin,
+                                                                          0,
+                                                                          leftRightPaddingAndMargin,
+                                                                          0),
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.max,
+                                                                        children: [
+                                                                          Padding(
+                                                                            padding: EdgeInsetsDirectional.fromSTEB(
+                                                                                0,
+                                                                                0,
+                                                                                16,
+                                                                                0),
+                                                                            child: maxVotes == entry.value
+                                                                                ? Icon(
+                                                                                    Icons.star,
+                                                                                    color: Color(0xFFFFCA27),
+                                                                                    size: 32,
+                                                                                  )
+                                                                                : Container(
+                                                                                    width: 32,
+                                                                                    height: 32,
+                                                                                  ), // 最大得票数でない場合でも同じスペースを確保
+                                                                          ),
+                                                                          Expanded(
+                                                                            child:
+                                                                                Column(
+                                                                              mainAxisSize: MainAxisSize.max,
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                                              children: [
+                                                                                Text('${entry.key} point${double.parse(entry.key) > 1 ? 's' : ''} 選択者', style: Theme.of(context).textTheme.labelMedium),
+                                                                                Row(
+                                                                                  mainAxisSize: MainAxisSize.max,
+                                                                                  children: [
+                                                                                    Padding(
+                                                                                      padding: EdgeInsetsDirectional.fromSTEB(0, 4, 4, 0),
+                                                                                      child: Text(
+                                                                                        '${entry.value} 名',
+                                                                                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                                                                                              fontFamily: "Outfit",
+                                                                                            ),
+                                                                                      ),
+                                                                                    ),
+                                                                                  ],
+                                                                                ),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                          CircularPercentIndicator(
+                                                                            percent:
+                                                                                entry.value / selectedCardModel.selectedCards.length,
+                                                                            radius:
+                                                                                45,
+                                                                            lineWidth:
+                                                                                8,
+                                                                            animation:
+                                                                                true,
+                                                                            animateFromLastPercent:
+                                                                                true,
+                                                                            progressColor:
+                                                                                Color(0xFF4B39EF),
+                                                                            backgroundColor:
+                                                                                Color(0x4C4B39EF),
+                                                                            center:
+                                                                                Text(
+                                                                              '${(entry.value / selectedCardModel.selectedCards.length * 100).round()}%',
+                                                                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                                                                    fontSize: 10,
+                                                                                    fontFamily: "Outfit",
+                                                                                  ),
+                                                                            ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              }
+
+                                                              return Column(
+                                                                children:
+                                                                    widgets,
+                                                              );
+                                                              // } else if (kIsWeb &&
+                                                              //     !isOneColumn) {
+                                                            } else if (kIsWeb &&
+                                                                !prefsDoNotShowAgain) {
+                                                              return Container(
+                                                                margin: EdgeInsetsDirectional
+                                                                    .fromSTEB(
+                                                                        0,
+                                                                        16,
+                                                                        leftRightPaddingAndMargin +
+                                                                            marginLeftPlus,
+                                                                        0),
                                                                 width: double
                                                                     .infinity,
-                                                                height: 80,
+                                                                // height: 80,
                                                                 constraints:
                                                                     BoxConstraints(
                                                                   maxWidth:
@@ -982,196 +1149,487 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                 child: Padding(
                                                                   padding: EdgeInsetsDirectional
                                                                       .fromSTEB(
-                                                                          leftRightPaddingAndMargin,
-                                                                          0,
-                                                                          leftRightPaddingAndMargin,
-                                                                          0),
-                                                                  child: Row(
+                                                                          qrCodeAreaLeftRightPadding,
+                                                                          16,
+                                                                          qrCodeAreaLeftRightPadding,
+                                                                          16),
+                                                                  child: Column(
                                                                     mainAxisSize:
                                                                         MainAxisSize
                                                                             .max,
+                                                                    mainAxisAlignment:
+                                                                        MainAxisAlignment
+                                                                            .center,
+                                                                    crossAxisAlignment:
+                                                                        CrossAxisAlignment
+                                                                            .start,
                                                                     children: [
+                                                                      Text(
+                                                                          'QRコードからiOS/Androidアプリを使用して参加できます',
+                                                                          style: Theme.of(context)
+                                                                              .textTheme
+                                                                              .labelMedium),
                                                                       Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            0,
-                                                                            0,
-                                                                            16,
-                                                                            0),
-                                                                        child: maxVotes ==
-                                                                                entry.value
-                                                                            ? Icon(
-                                                                                Icons.star,
-                                                                                color: Color(0xFFFFCA27),
-                                                                                size: 32,
-                                                                              )
-                                                                            : Container(
-                                                                                width: 32,
-                                                                                height: 32,
-                                                                              ), // 最大得票数でない場合でも同じスペースを確保
-                                                                      ),
-                                                                      Expanded(
+                                                                        padding:
+                                                                            EdgeInsets.symmetric(vertical: 8.0),
                                                                         child:
-                                                                            Column(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.max,
-                                                                          mainAxisAlignment:
-                                                                              MainAxisAlignment.center,
-                                                                          crossAxisAlignment:
-                                                                              CrossAxisAlignment.start,
-                                                                          children: [
-                                                                            Text('${entry.key} point${double.parse(entry.key) > 1 ? 's' : ''} 選択者',
-                                                                                style: Theme.of(context).textTheme.labelMedium),
                                                                             Row(
-                                                                              mainAxisSize: MainAxisSize.max,
-                                                                              children: [
-                                                                                Padding(
-                                                                                  padding: EdgeInsetsDirectional.fromSTEB(0, 4, 4, 0),
-                                                                                  child: Text(
-                                                                                    '${entry.value} 名',
-                                                                                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                                                                                          fontFamily: "Outfit",
-                                                                                        ),
-                                                                                  ),
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.start,
+                                                                          children: [
+                                                                            Padding(
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(0, 0, qRCodeRightPadding, 0),
+                                                                              child: QrImageView(
+                                                                                data: 'https://[スクリプト設置ドメイン]/open-ios-app.php?roomID=${widget.roomID}',
+                                                                                version: QrVersions.auto,
+                                                                                embeddedImage: AssetImage('assets/images/apple.png'),
+                                                                                size:
+                                                                                    // 200.0,
+                                                                                    qrCodeSize,
+                                                                              ),
+                                                                            ),
+                                                                            Padding(
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(0, 0, 0, 0),
+                                                                              child: GestureDetector(
+                                                                                onTap: () async {
+                                                                                  final url = Uri.parse('https://apps.apple.com/jp/app/%E3%83%97%E3%83%A9%E3%83%B3%E3%83%8B%E3%83%B3%E3%82%B0%E3%83%9D%E3%83%BC%E3%82%AB%E3%83%BC/id6503992242?itsct=apps_box_badge&itscg=30200');
+                                                                                  if (await canLaunchUrl(url)) {
+                                                                                    await launchUrl(url);
+                                                                                  } else {
+                                                                                    throw 'Could not launch $url';
+                                                                                  }
+                                                                                },
+                                                                                child: SvgPicture.asset(
+                                                                                  'assets/images/appstore_black.svg',
+                                                                                  // width:
+                                                                                  //     250, // 幅を指定
+                                                                                  height:
+                                                                                      // 83, // 高さを指定
+                                                                                      storeBadgeHeight, // 高さを指定
+                                                                                  fit: BoxFit.fill,
                                                                                 ),
-                                                                              ],
+                                                                              ),
                                                                             ),
                                                                           ],
                                                                         ),
                                                                       ),
-                                                                      CircularPercentIndicator(
-                                                                        percent:
-                                                                            entry.value /
-                                                                                selectedCardModel.selectedCards.length,
-                                                                        radius:
-                                                                            45,
-                                                                        lineWidth:
-                                                                            8,
-                                                                        animation:
-                                                                            true,
-                                                                        animateFromLastPercent:
-                                                                            true,
-                                                                        progressColor:
-                                                                            Color(0xFF4B39EF),
-                                                                        backgroundColor:
-                                                                            Color(0x4C4B39EF),
-                                                                        center:
-                                                                            Text(
-                                                                          '${(entry.value / selectedCardModel.selectedCards.length * 100).round()}%',
-                                                                          style: Theme.of(context)
-                                                                              .textTheme
-                                                                              .headlineMedium
-                                                                              ?.copyWith(
-                                                                                fontSize: 10,
-                                                                                fontFamily: "Outfit",
+                                                                      Padding(
+                                                                        padding:
+                                                                            EdgeInsets.symmetric(vertical: 8.0),
+                                                                        child:
+                                                                            Row(
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.start,
+                                                                          children: [
+                                                                            Padding(
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(0, 0, qRCodeRightPadding, 0),
+                                                                              child: QrImageView(
+                                                                                data: 'https://[スクリプト設置ドメイン]/open-android-app.php?roomID=${widget.roomID}',
+                                                                                version: QrVersions.auto,
+                                                                                embeddedImage: AssetImage('assets/images/android.png'),
+                                                                                size:
+                                                                                    // 200.0,
+                                                                                    qrCodeSize,
                                                                               ),
+                                                                            ),
+                                                                            Padding(
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(0, 0, 0, 0),
+                                                                              child: GestureDetector(
+                                                                                onTap: () async {
+                                                                                  final url = Uri.parse('https://play.google.com/store/apps/details?id=net.ocean_light.planning_poker_app&pcampaignid=web_share');
+                                                                                  if (await canLaunchUrl(url)) {
+                                                                                    await launchUrl(url);
+                                                                                  } else {
+                                                                                    throw 'Could not launch $url';
+                                                                                  }
+                                                                                },
+                                                                                child: SvgPicture.asset(
+                                                                                  'assets/images/googleplaystore_black.svg',
+                                                                                  // width:
+                                                                                  //     250, // 幅を指定
+                                                                                  height:
+                                                                                      // 83, // 高さを指定
+                                                                                      storeBadgeHeight, // 高さを指定
+                                                                                  fit: BoxFit.fill,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                      Padding(
+                                                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                                                            0,
+                                                                            16,
+                                                                            0,
+                                                                            0),
+                                                                        child:
+                                                                            SizedBox(
+                                                                          height:
+                                                                              40,
+                                                                          child:
+                                                                              ElevatedButton(
+                                                                            onPressed:
+                                                                                () async {
+                                                                              await _saveDoNotShowAgainPreference();
+                                                                              setState(() {
+                                                                                initFuture = Future.wait([
+                                                                                  roomScreenCheckRoomExists(),
+                                                                                  checkUserName(true),
+                                                                                  loadUserImage(),
+                                                                                  checkPrefsUserImage(),
+                                                                                  checkBlockUser(widget.roomID.toString()),
+                                                                                  getDoNotShowAgainPreference(),
+                                                                                ]);
+                                                                              });
+                                                                            },
+                                                                            child:
+                                                                                Text(
+                                                                              "案内をしばらく表示しない",
+                                                                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                                                    color: Color(0xFFFFFFFF),
+                                                                                  ),
+                                                                            ),
+                                                                            style:
+                                                                                ElevatedButton.styleFrom(
+                                                                              backgroundColor: Color(0xFF4B39EF),
+                                                                              foregroundColor: Color(0xFFFFFFFF),
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
+                                                                              shape: RoundedRectangleBorder(
+                                                                                borderRadius: BorderRadius.circular(8),
+                                                                              ),
+                                                                            ),
+                                                                          ),
                                                                         ),
                                                                       ),
                                                                     ],
                                                                   ),
                                                                 ),
+                                                              );
+                                                            } else {
+                                                              return Column(
+                                                                children: [],
+                                                              );
+                                                            }
+                                                          },
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                ),
+                                                Consumer<SelectedCardsModel>(
+                                                  builder: (context,
+                                                      selectedCardModel,
+                                                      child) {
+                                                    return Consumer<
+                                                        CardCountsModel>(
+                                                      builder: (context,
+                                                          cardCountsModel,
+                                                          child) {
+                                                        return Consumer<
+                                                            IsResultVisibleModel>(
+                                                          builder: (context,
+                                                              isResultVisibleModel,
+                                                              child) {
+                                                            int userCount =
+                                                                selectedCardModel
+                                                                    .selectedCards
+                                                                    .length;
+                                                            int selectedCount =
+                                                                selectedCardModel
+                                                                    .selectedCards
+                                                                    .values
+                                                                    .where((userMap) =>
+                                                                        userMap['selectedCard']
+                                                                            ?.isNotEmpty ??
+                                                                        false)
+                                                                    .length;
+                                                            double averagePoints = selectedCardModel
+                                                                    .selectedCards
+                                                                    .values
+                                                                    .where((userMap) =>
+                                                                        userMap['selectedCard']
+                                                                            ?.isNotEmpty ??
+                                                                        false)
+                                                                    .map((userMap) =>
+                                                                        double.parse(userMap['selectedCard'] ??
+                                                                            '0'))
+                                                                    .fold(
+                                                                        0.0,
+                                                                        (double previousValue, element) =>
+                                                                            previousValue +
+                                                                            element) /
+                                                                (selectedCount >
+                                                                        0
+                                                                    ? selectedCount
+                                                                    : 1);
+
+                                                            return Container(
+                                                              margin: EdgeInsetsDirectional.fromSTEB(
+                                                                  0,
+                                                                  16,
+                                                                  leftRightPaddingAndMargin +
+                                                                      marginLeftPlus,
+                                                                  voteResultAreaMarginBottom),
+                                                              width: double
+                                                                  .infinity,
+                                                              constraints:
+                                                                  BoxConstraints(
+                                                                maxWidth:
+                                                                    leftAreaWidth,
+                                                              ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: Colors
+                                                                    .white,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            8),
+                                                                border:
+                                                                    Border.all(
+                                                                  color: Color(
+                                                                      0xFFE0E3E7),
+                                                                  width: 1,
+                                                                ),
+                                                              ),
+                                                              child: Padding(
+                                                                padding:
+                                                                    EdgeInsetsDirectional
+                                                                        .fromSTEB(
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            16),
+                                                                child: Column(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .max,
+                                                                  mainAxisAlignment:
+                                                                      MainAxisAlignment
+                                                                          .start,
+                                                                  crossAxisAlignment:
+                                                                      CrossAxisAlignment
+                                                                          .start,
+                                                                  children: [
+                                                                    Padding(
+                                                                      padding: EdgeInsetsDirectional
+                                                                          .fromSTEB(
+                                                                              1,
+                                                                              1,
+                                                                              1,
+                                                                              0),
+                                                                      child:
+                                                                          Container(
+                                                                        width: double
+                                                                            .infinity,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color:
+                                                                              Colors.white,
+                                                                          boxShadow: [
+                                                                            BoxShadow(
+                                                                              blurRadius: 0,
+                                                                              color: Color(0xFFE0E3E7),
+                                                                              offset: Offset(
+                                                                                0,
+                                                                                1,
+                                                                              ),
+                                                                            )
+                                                                          ],
+                                                                          borderRadius:
+                                                                              BorderRadius.only(
+                                                                            bottomLeft:
+                                                                                Radius.circular(0),
+                                                                            bottomRight:
+                                                                                Radius.circular(0),
+                                                                            topLeft:
+                                                                                Radius.circular(8),
+                                                                            topRight:
+                                                                                Radius.circular(8),
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            Padding(
+                                                                          padding: EdgeInsetsDirectional.fromSTEB(
+                                                                              voteResultAreaPadding,
+                                                                              0,
+                                                                              voteResultAreaPadding,
+                                                                              0),
+                                                                          child:
+                                                                              Row(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.max,
+                                                                            children: [
+                                                                              Expanded(
+                                                                                child: Padding(
+                                                                                  padding: EdgeInsetsDirectional.fromSTEB(0, 16, 0, 16),
+                                                                                  child: Column(
+                                                                                    mainAxisSize: MainAxisSize.max,
+                                                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                    children: [
+                                                                                      Text('投票結果', style: Theme.of(context).textTheme.titleLarge),
+                                                                                      Padding(
+                                                                                        padding: EdgeInsetsDirectional.fromSTEB(0, 4, 0, 0),
+                                                                                        child: Text(
+                                                                                            isResultVisibleModel.resultVisible
+                                                                                                ? '投票結果を集計しました'
+                                                                                                : userCount > 0 && selectedCount >= userCount
+                                                                                                    ? '投票率が100%になりました'
+                                                                                                    : '投票を待っています',
+                                                                                            style: Theme.of(context).textTheme.labelMedium),
+                                                                                      ),
+                                                                                    ],
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    Align(
+                                                                      alignment:
+                                                                          AlignmentDirectional(
+                                                                              0,
+                                                                              0),
+                                                                      child:
+                                                                          Padding(
+                                                                        padding: EdgeInsetsDirectional.fromSTEB(
+                                                                            voteResultAreaPadding,
+                                                                            voteResultAreaPadding,
+                                                                            voteResultAreaPadding,
+                                                                            0),
+                                                                        child:
+                                                                            CircularPercentIndicator(
+                                                                          percent: userCount > 0
+                                                                              ? selectedCount / userCount
+                                                                              : 0,
+                                                                          radius:
+                                                                              120,
+                                                                          lineWidth:
+                                                                              20,
+                                                                          animation:
+                                                                              true,
+                                                                          animateFromLastPercent:
+                                                                              true,
+                                                                          progressColor:
+                                                                              Color(0xFF4B39EF),
+                                                                          backgroundColor:
+                                                                              Color(0x4C4B39EF),
+                                                                          center:
+                                                                              Text(
+                                                                            '${userCount > 0 ? (selectedCount / userCount * 100).round() : 0}%',
+                                                                            style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                                                                                  fontFamily: "Outfit",
+                                                                                ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    Padding(
+                                                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                                                          voteResultAreaPadding,
+                                                                          16,
+                                                                          voteResultAreaPadding,
+                                                                          0),
+                                                                      child: Text(
+                                                                          isResultVisibleModel.resultVisible
+                                                                              ? '平均値'
+                                                                              : '投票率',
+                                                                          style: Theme.of(context)
+                                                                              .textTheme
+                                                                              .bodyLarge),
+                                                                    ),
+                                                                    Padding(
+                                                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                                                          voteResultAreaPadding,
+                                                                          4,
+                                                                          voteResultAreaPadding,
+                                                                          8),
+                                                                      child: Text(
+                                                                          isResultVisibleModel.resultVisible
+                                                                              ? "${(averagePoints * 10).round() / 10} point${averagePoints > 1 ? 's' : ''}"
+                                                                              : "上記の通りです（${userCount} 人中 ${selectedCount} 人が投票）",
+                                                                          style: Theme.of(context)
+                                                                              .textTheme
+                                                                              .labelSmall),
+                                                                    ),
+                                                                  ],
+                                                                ),
                                                               ),
                                                             );
-                                                          }
-                                                          return Column(
-                                                            children: widgets,
-                                                          );
-                                                        },
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              ),
-                                              Consumer<SelectedCardsModel>(
-                                                builder: (context,
-                                                    selectedCardModel, child) {
-                                                  return Consumer<
-                                                      CardCountsModel>(
-                                                    builder: (context,
-                                                        cardCountsModel,
-                                                        child) {
-                                                      return Consumer<
-                                                          IsResultVisibleModel>(
-                                                        builder: (context,
-                                                            isResultVisibleModel,
-                                                            child) {
-                                                          int userCount =
-                                                              selectedCardModel
-                                                                  .selectedCards
-                                                                  .length;
-                                                          int selectedCount =
-                                                              selectedCardModel
-                                                                  .selectedCards
-                                                                  .values
-                                                                  .where((userMap) =>
-                                                                      userMap['selectedCard']
-                                                                          ?.isNotEmpty ??
-                                                                      false)
-                                                                  .length;
-                                                          double averagePoints = selectedCardModel
-                                                                  .selectedCards
-                                                                  .values
-                                                                  .where((userMap) =>
-                                                                      userMap['selectedCard']
-                                                                          ?.isNotEmpty ??
-                                                                      false)
-                                                                  .map((userMap) =>
-                                                                      double.parse(
-                                                                          userMap['selectedCard'] ??
-                                                                              '0'))
-                                                                  .fold(
-                                                                      0.0,
-                                                                      (double previousValue,
-                                                                              element) =>
-                                                                          previousValue +
-                                                                          element) /
-                                                              (selectedCount > 0
-                                                                  ? selectedCount
-                                                                  : 1);
-
-                                                          return Container(
-                                                            margin: EdgeInsetsDirectional.fromSTEB(
-                                                                0,
-                                                                16,
-                                                                leftRightPaddingAndMargin +
-                                                                    marginLeftPlus,
-                                                                voteResultAreaMarginBottom),
-                                                            width:
-                                                                double.infinity,
-                                                            constraints:
-                                                                BoxConstraints(
-                                                              maxWidth:
-                                                                  leftAreaWidth,
-                                                            ),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color:
-                                                                  Colors.white,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          8),
-                                                              border:
-                                                                  Border.all(
-                                                                color: Color(
-                                                                    0xFFE0E3E7),
-                                                                width: 1,
-                                                              ),
-                                                            ),
-                                                            child: Padding(
-                                                              padding:
-                                                                  EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          0,
-                                                                          0,
-                                                                          0,
-                                                                          16),
+                                                          },
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            width: rightAreaWidth,
+                                            child: Padding(
+                                              padding: EdgeInsetsDirectional
+                                                  .fromSTEB(0, 0, 0, 0),
+                                              child: Container(
+                                                margin: EdgeInsetsDirectional
+                                                    .fromSTEB(
+                                                        0,
+                                                        16,
+                                                        leftRightPaddingAndMargin +
+                                                            marginLeftPlus,
+                                                        16),
+                                                width: double.infinity,
+                                                constraints: BoxConstraints(
+                                                  maxWidth: rightAreaWidth,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: Color(0xFFE0E3E7),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Padding(
+                                                  padding: EdgeInsetsDirectional
+                                                      .fromSTEB(
+                                                          rightAreaPadding,
+                                                          16,
+                                                          rightAreaPadding,
+                                                          16),
+                                                  child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.max,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      IntrinsicHeight(
+                                                        child: Flex(
+                                                          direction: screenWidth <=
+                                                                  ThemeProvider
+                                                                      .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                              ? Axis.vertical
+                                                              : Axis
+                                                                  .horizontal, // screenWidthがThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH以下の場合はColumn（垂直方向）、それ以外の場合はRow（水平方向）
+                                                          mainAxisSize:
+                                                              MainAxisSize.max,
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .spaceBetween,
+                                                          children: [
+                                                            Container(
+                                                              width:
+                                                                  rightAreaHeaderLeftWidth,
                                                               child: Column(
                                                                 mainAxisSize:
                                                                     MainAxisSize
                                                                         .max,
-                                                                mainAxisAlignment:
-                                                                    MainAxisAlignment
-                                                                        .start,
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
                                                                         .start,
@@ -1179,882 +1637,632 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
                                                                   Padding(
                                                                     padding: EdgeInsetsDirectional
                                                                         .fromSTEB(
-                                                                            1,
-                                                                            1,
-                                                                            1,
-                                                                            0),
-                                                                    child:
-                                                                        Container(
-                                                                      width: double
-                                                                          .infinity,
-                                                                      decoration:
-                                                                          BoxDecoration(
-                                                                        color: Colors
-                                                                            .white,
-                                                                        boxShadow: [
-                                                                          BoxShadow(
-                                                                            blurRadius:
-                                                                                0,
-                                                                            color:
-                                                                                Color(0xFFE0E3E7),
-                                                                            offset:
-                                                                                Offset(
-                                                                              0,
-                                                                              1,
-                                                                            ),
-                                                                          )
-                                                                        ],
-                                                                        borderRadius:
-                                                                            BorderRadius.only(
-                                                                          bottomLeft:
-                                                                              Radius.circular(0),
-                                                                          bottomRight:
-                                                                              Radius.circular(0),
-                                                                          topLeft:
-                                                                              Radius.circular(8),
-                                                                          topRight:
-                                                                              Radius.circular(8),
-                                                                        ),
-                                                                      ),
-                                                                      child:
-                                                                          Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            voteResultAreaPadding,
+                                                                            rightAreaHeaderPadding,
                                                                             0,
-                                                                            voteResultAreaPadding,
+                                                                            12,
                                                                             0),
-                                                                        child:
-                                                                            Row(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.max,
-                                                                          children: [
-                                                                            Expanded(
-                                                                              child: Padding(
-                                                                                padding: EdgeInsetsDirectional.fromSTEB(0, 16, 0, 16),
-                                                                                child: Column(
-                                                                                  mainAxisSize: MainAxisSize.max,
-                                                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                  children: [
-                                                                                    Text('投票結果', style: Theme.of(context).textTheme.titleLarge),
-                                                                                    Padding(
-                                                                                      padding: EdgeInsetsDirectional.fromSTEB(0, 4, 0, 0),
-                                                                                      child: Text(
-                                                                                          isResultVisibleModel.resultVisible
-                                                                                              ? '投票結果を集計しました'
-                                                                                              : userCount > 0 && selectedCount >= userCount
-                                                                                                  ? '投票率が100%になりました'
-                                                                                                  : '投票を待っています',
-                                                                                          style: Theme.of(context).textTheme.labelMedium),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  Align(
-                                                                    alignment:
-                                                                        AlignmentDirectional(
-                                                                            0,
-                                                                            0),
-                                                                    child:
-                                                                        Padding(
-                                                                      padding: EdgeInsetsDirectional.fromSTEB(
-                                                                          voteResultAreaPadding,
-                                                                          voteResultAreaPadding,
-                                                                          voteResultAreaPadding,
-                                                                          0),
-                                                                      child:
-                                                                          CircularPercentIndicator(
-                                                                        percent: userCount >
-                                                                                0
-                                                                            ? selectedCount /
-                                                                                userCount
-                                                                            : 0,
-                                                                        radius:
-                                                                            120,
-                                                                        lineWidth:
-                                                                            20,
-                                                                        animation:
-                                                                            true,
-                                                                        animateFromLastPercent:
-                                                                            true,
-                                                                        progressColor:
-                                                                            Color(0xFF4B39EF),
-                                                                        backgroundColor:
-                                                                            Color(0x4C4B39EF),
-                                                                        center:
-                                                                            Text(
-                                                                          '${userCount > 0 ? (selectedCount / userCount * 100).round() : 0}%',
-                                                                          style: Theme.of(context)
-                                                                              .textTheme
-                                                                              .displaySmall
-                                                                              ?.copyWith(
-                                                                                fontFamily: "Outfit",
-                                                                              ),
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  Padding(
-                                                                    padding: EdgeInsetsDirectional.fromSTEB(
-                                                                        voteResultAreaPadding,
-                                                                        16,
-                                                                        voteResultAreaPadding,
-                                                                        0),
                                                                     child: Text(
-                                                                        isResultVisibleModel.resultVisible
-                                                                            ? '平均値'
-                                                                            : '投票率',
+                                                                        'プレイヤー情報',
                                                                         style: Theme.of(context)
                                                                             .textTheme
-                                                                            .bodyLarge),
+                                                                            .headlineMedium),
                                                                   ),
-                                                                  Padding(
-                                                                    padding: EdgeInsetsDirectional.fromSTEB(
-                                                                        voteResultAreaPadding,
-                                                                        4,
-                                                                        voteResultAreaPadding,
-                                                                        8),
-                                                                    child: Text(
-                                                                        isResultVisibleModel.resultVisible
-                                                                            ? "${(averagePoints * 10).round() / 10} point${averagePoints > 1 ? 's' : ''}"
-                                                                            : "上記の通りです（${userCount} 人中 ${selectedCount} 人が投票）",
-                                                                        style: Theme.of(context)
-                                                                            .textTheme
-                                                                            .labelSmall),
-                                                                  ),
+                                                                  screenWidth <=
+                                                                          ThemeProvider
+                                                                              .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                      ? Container()
+                                                                      : Padding(
+                                                                          padding: EdgeInsetsDirectional.fromSTEB(
+                                                                              rightAreaHeaderPadding,
+                                                                              4,
+                                                                              12,
+                                                                              0),
+                                                                          child: Text(
+                                                                              '各プレイヤーのカード選択状況は以下の通りです',
+                                                                              style: Theme.of(context).textTheme.labelMedium),
+                                                                        ),
                                                                 ],
                                                               ),
                                                             ),
-                                                          );
-                                                        },
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Container(
-                                          width: rightAreaWidth,
-                                          child: Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    0, 0, 0, 0),
-                                            child: Container(
-                                              margin: EdgeInsetsDirectional
-                                                  .fromSTEB(
-                                                      0,
-                                                      16,
-                                                      leftRightPaddingAndMargin +
-                                                          marginLeftPlus,
-                                                      16),
-                                              width: double.infinity,
-                                              constraints: BoxConstraints(
-                                                maxWidth: rightAreaWidth,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: Color(0xFFE0E3E7),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Padding(
-                                                padding: EdgeInsetsDirectional
-                                                    .fromSTEB(
-                                                        rightAreaPadding,
-                                                        16,
-                                                        rightAreaPadding,
-                                                        16),
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.max,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    IntrinsicHeight(
-                                                      child: Flex(
-                                                        direction: screenWidth <=
-                                                                ThemeProvider
-                                                                    .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                            ? Axis.vertical
-                                                            : Axis
-                                                                .horizontal, // screenWidthがThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH以下の場合はColumn（垂直方向）、それ以外の場合はRow（水平方向）
-                                                        mainAxisSize:
-                                                            MainAxisSize.max,
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .spaceBetween,
-                                                        children: [
-                                                          Container(
-                                                            width:
-                                                                rightAreaHeaderLeftWidth,
-                                                            child: Column(
+                                                            Container(
+                                                              width:
+                                                                  rightAreaHeaderRightWidth,
+                                                              padding: screenWidth <=
+                                                                      ThemeProvider
+                                                                          .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                  ? EdgeInsetsDirectional
+                                                                      .fromSTEB(
+                                                                          rightAreaHeaderPadding,
+                                                                          16,
+                                                                          rightAreaHeaderPadding,
+                                                                          0)
+                                                                  : EdgeInsetsDirectional
+                                                                      .fromSTEB(
+                                                                          0,
+                                                                          0,
+                                                                          rightAreaHeaderPadding,
+                                                                          0),
+                                                              child: Align(
+                                                                alignment: screenWidth <=
+                                                                        ThemeProvider
+                                                                            .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                    ? Alignment
+                                                                        .centerLeft
+                                                                    : Alignment
+                                                                        .centerRight,
+                                                                child: Wrap(
+                                                                  spacing:
+                                                                      16, // ボタン間のスペース
+                                                                  runSpacing:
+                                                                      16, // 行間のスペース
+                                                                  children: [
+                                                                    Container(
+                                                                      child:
+                                                                          SizedBox(
+                                                                        height:
+                                                                            40,
+                                                                        width:
+                                                                            120,
+                                                                        child:
+                                                                            ElevatedButton(
+                                                                          onPressed:
+                                                                              () {
+                                                                            updateLastActivityDateTime();
+
+                                                                            changeResultVisible(true);
+                                                                          },
+                                                                          child:
+                                                                              Text(
+                                                                            "結果を表示",
+                                                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                                                  color: Color(0xFFFFFFFF),
+                                                                                ),
+                                                                          ),
+                                                                          style:
+                                                                              ElevatedButton.styleFrom(
+                                                                            backgroundColor:
+                                                                                Color(0xFF4B39EF),
+                                                                            foregroundColor:
+                                                                                Color(0xFFFFFFFF),
+                                                                            padding: EdgeInsetsDirectional.fromSTEB(
+                                                                                16,
+                                                                                0,
+                                                                                16,
+                                                                                0),
+                                                                            shape:
+                                                                                RoundedRectangleBorder(
+                                                                              borderRadius: BorderRadius.circular(8),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    Container(
+                                                                      child:
+                                                                          SizedBox(
+                                                                        height:
+                                                                            40,
+                                                                        width:
+                                                                            120,
+                                                                        child:
+                                                                            ElevatedButton(
+                                                                          onPressed:
+                                                                              () async {
+                                                                            await clearAllSelectedCards();
+                                                                            updateLastActivityDateTime();
+
+                                                                            changeResultVisible(false);
+                                                                          },
+                                                                          child:
+                                                                              Text(
+                                                                            "結果をクリア",
+                                                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                                                  color: Color(0xFFFFFFFF),
+                                                                                ),
+                                                                          ),
+                                                                          style:
+                                                                              ElevatedButton.styleFrom(
+                                                                            backgroundColor:
+                                                                                Color(0xFF4B39EF),
+                                                                            foregroundColor:
+                                                                                Color(0xFFFFFFFF),
+                                                                            padding: EdgeInsetsDirectional.fromSTEB(
+                                                                                16,
+                                                                                0,
+                                                                                16,
+                                                                                0),
+                                                                            shape:
+                                                                                RoundedRectangleBorder(
+                                                                              borderRadius: BorderRadius.circular(8),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      Padding(
+                                                        padding:
+                                                            EdgeInsetsDirectional
+                                                                .fromSTEB(0, 16,
+                                                                    0, 0),
+                                                        child: Container(
+                                                          width:
+                                                              double.infinity,
+                                                          height: 40,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Color(
+                                                                0xFFF1F4F8),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .only(
+                                                              bottomLeft: Radius
+                                                                  .circular(0),
+                                                              bottomRight:
+                                                                  Radius
+                                                                      .circular(
+                                                                          0),
+                                                              topLeft: Radius
+                                                                  .circular(8),
+                                                              topRight: Radius
+                                                                  .circular(8),
+                                                            ),
+                                                          ),
+                                                          child: Padding(
+                                                            padding: EdgeInsetsDirectional
+                                                                .fromSTEB(
+                                                                    leftRightPaddingAndMargin,
+                                                                    0,
+                                                                    leftRightPaddingAndMargin,
+                                                                    0),
+                                                            child: Row(
                                                               mainAxisSize:
                                                                   MainAxisSize
                                                                       .max,
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
                                                               children: [
-                                                                Padding(
-                                                                  padding: EdgeInsetsDirectional
-                                                                      .fromSTEB(
-                                                                          rightAreaHeaderPadding,
-                                                                          0,
-                                                                          12,
-                                                                          0),
+                                                                Expanded(
+                                                                  flex:
+                                                                      playerNameAreaFlexValue,
                                                                   child: Text(
-                                                                      'プレイヤー情報',
-                                                                      style: Theme.of(
-                                                                              context)
-                                                                          .textTheme
-                                                                          .headlineMedium),
-                                                                ),
-                                                                screenWidth <=
-                                                                        ThemeProvider
-                                                                            .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                                    ? Container()
-                                                                    : Padding(
-                                                                        padding: EdgeInsetsDirectional.fromSTEB(
-                                                                            rightAreaHeaderPadding,
-                                                                            4,
-                                                                            12,
-                                                                            0),
-                                                                        child: Text(
-                                                                            '各プレイヤーのカード選択状況は以下の通りです',
-                                                                            style:
-                                                                                Theme.of(context).textTheme.labelMedium),
-                                                                      ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            width:
-                                                                rightAreaHeaderRightWidth,
-                                                            padding: screenWidth <=
-                                                                    ThemeProvider
-                                                                        .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                                ? EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        rightAreaHeaderPadding,
-                                                                        16,
-                                                                        rightAreaHeaderPadding,
-                                                                        0)
-                                                                : EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        0,
-                                                                        0,
-                                                                        rightAreaHeaderPadding,
-                                                                        0),
-                                                            child: Align(
-                                                              alignment: screenWidth <=
-                                                                      ThemeProvider
-                                                                          .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                                  ? Alignment
-                                                                      .centerLeft
-                                                                  : Alignment
-                                                                      .centerRight,
-                                                              child: Wrap(
-                                                                spacing:
-                                                                    16, // ボタン間のスペース
-                                                                runSpacing:
-                                                                    16, // 行間のスペース
-                                                                children: [
-                                                                  Container(
-                                                                    child:
-                                                                        SizedBox(
-                                                                      height:
-                                                                          40,
-                                                                      width:
-                                                                          120,
-                                                                      child:
-                                                                          ElevatedButton(
-                                                                        onPressed:
-                                                                            () {
-                                                                          updateLastActivityDateTime();
-
-                                                                          changeResultVisible(
-                                                                              true);
-                                                                        },
-                                                                        child:
-                                                                            Text(
-                                                                          "結果を表示",
-                                                                          style: Theme.of(context)
-                                                                              .textTheme
-                                                                              .titleSmall
-                                                                              ?.copyWith(
-                                                                                color: Color(0xFFFFFFFF),
-                                                                              ),
-                                                                        ),
-                                                                        style: ElevatedButton
-                                                                            .styleFrom(
-                                                                          backgroundColor:
-                                                                              Color(0xFF4B39EF),
-                                                                          foregroundColor:
-                                                                              Color(0xFFFFFFFF),
-                                                                          padding: EdgeInsetsDirectional.fromSTEB(
-                                                                              16,
-                                                                              0,
-                                                                              16,
-                                                                              0),
-                                                                          shape:
-                                                                              RoundedRectangleBorder(
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(8),
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  Container(
-                                                                    child:
-                                                                        SizedBox(
-                                                                      height:
-                                                                          40,
-                                                                      width:
-                                                                          120,
-                                                                      child:
-                                                                          ElevatedButton(
-                                                                        onPressed:
-                                                                            () async {
-                                                                          await clearAllSelectedCards();
-                                                                          updateLastActivityDateTime();
-
-                                                                          changeResultVisible(
-                                                                              false);
-                                                                        },
-                                                                        child:
-                                                                            Text(
-                                                                          "結果をクリア",
-                                                                          style: Theme.of(context)
-                                                                              .textTheme
-                                                                              .titleSmall
-                                                                              ?.copyWith(
-                                                                                color: Color(0xFFFFFFFF),
-                                                                              ),
-                                                                        ),
-                                                                        style: ElevatedButton
-                                                                            .styleFrom(
-                                                                          backgroundColor:
-                                                                              Color(0xFF4B39EF),
-                                                                          foregroundColor:
-                                                                              Color(0xFFFFFFFF),
-                                                                          padding: EdgeInsetsDirectional.fromSTEB(
-                                                                              16,
-                                                                              0,
-                                                                              16,
-                                                                              0),
-                                                                          shape:
-                                                                              RoundedRectangleBorder(
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(8),
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  0, 16, 0, 0),
-                                                      child: Container(
-                                                        width: double.infinity,
-                                                        height: 40,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Color(0xFFF1F4F8),
-                                                          borderRadius:
-                                                              BorderRadius.only(
-                                                            bottomLeft:
-                                                                Radius.circular(
-                                                                    0),
-                                                            bottomRight:
-                                                                Radius.circular(
-                                                                    0),
-                                                            topLeft:
-                                                                Radius.circular(
-                                                                    8),
-                                                            topRight:
-                                                                Radius.circular(
-                                                                    8),
-                                                          ),
-                                                        ),
-                                                        child: Padding(
-                                                          padding: EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  leftRightPaddingAndMargin,
-                                                                  0,
-                                                                  leftRightPaddingAndMargin,
-                                                                  0),
-                                                          child: Row(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .max,
-                                                            children: [
-                                                              Expanded(
-                                                                flex:
-                                                                    playerNameAreaFlexValue,
-                                                                child: Text(
-                                                                  'プレイヤー',
-                                                                  style: Theme.of(
-                                                                          context)
-                                                                      .textTheme
-                                                                      .labelSmall,
-                                                                ),
-                                                              ),
-                                                              Expanded(
-                                                                flex:
-                                                                    selectCardAreaFlexValue,
-                                                                child: Text(
-                                                                  '選択カード',
-                                                                  style: Theme.of(
-                                                                          context)
-                                                                      .textTheme
-                                                                      .labelSmall,
-                                                                  textAlign:
-                                                                      TextAlign
-                                                                          .center,
-                                                                ),
-                                                              ),
-                                                              Expanded(
-                                                                flex:
-                                                                    playerStatusAreaFlexValue,
-                                                                child: Text(
-                                                                  '状態',
-                                                                  style: Theme.of(
-                                                                          context)
-                                                                      .textTheme
-                                                                      .labelSmall,
-                                                                  textAlign:
-                                                                      TextAlign
-                                                                          .center,
-                                                                ),
-                                                              ),
-                                                              Expanded(
-                                                                flex:
-                                                                    playerActionAreaFlexValue,
-                                                                child: Padding(
-                                                                  padding: EdgeInsets
-                                                                      .only(
-                                                                          right:
-                                                                              8.0),
-                                                                  child: Text(
-                                                                    '処理',
+                                                                    'プレイヤー',
                                                                     style: Theme.of(
                                                                             context)
                                                                         .textTheme
                                                                         .labelSmall,
-                                                                    textAlign: screenWidth <=
-                                                                            ThemeProvider
-                                                                                .SMART_PHONE_STANDARD_SCREEN_WIDTH
-                                                                        ? TextAlign
-                                                                            .center
-                                                                        : TextAlign
-                                                                            .end,
                                                                   ),
                                                                 ),
-                                                              ),
-                                                            ],
+                                                                Expanded(
+                                                                  flex:
+                                                                      selectCardAreaFlexValue,
+                                                                  child: Text(
+                                                                    '選択カード',
+                                                                    style: Theme.of(
+                                                                            context)
+                                                                        .textTheme
+                                                                        .labelSmall,
+                                                                    textAlign:
+                                                                        TextAlign
+                                                                            .center,
+                                                                  ),
+                                                                ),
+                                                                Expanded(
+                                                                  flex:
+                                                                      playerStatusAreaFlexValue,
+                                                                  child: Text(
+                                                                    '状態',
+                                                                    style: Theme.of(
+                                                                            context)
+                                                                        .textTheme
+                                                                        .labelSmall,
+                                                                    textAlign:
+                                                                        TextAlign
+                                                                            .center,
+                                                                  ),
+                                                                ),
+                                                                Expanded(
+                                                                  flex:
+                                                                      playerActionAreaFlexValue,
+                                                                  child:
+                                                                      Padding(
+                                                                    padding: EdgeInsets.only(
+                                                                        right:
+                                                                            8.0),
+                                                                    child: Text(
+                                                                      '処理',
+                                                                      style: Theme.of(
+                                                                              context)
+                                                                          .textTheme
+                                                                          .labelSmall,
+                                                                      textAlign: screenWidth <=
+                                                                              ThemeProvider
+                                                                                  .SMART_PHONE_STANDARD_SCREEN_WIDTH
+                                                                          ? TextAlign
+                                                                              .center
+                                                                          : TextAlign
+                                                                              .end,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    Consumer<
-                                                        SelectedCardsModel>(
-                                                      builder: (context,
-                                                          selectedCardsModel,
-                                                          child) {
-                                                        String roomIDString =
-                                                            widget.roomID
-                                                                .toString();
-                                                        List<Widget> widgets =
-                                                            [];
-                                                        for (var entry
-                                                            in selectedCardsModel
-                                                                .selectedCards
-                                                                .entries
-                                                                .toList()
-                                                                .asMap()
-                                                                .entries) {
-                                                          MapEntry<
-                                                                  String,
-                                                                  Map<String,
-                                                                      String?>>
-                                                              cardEntry =
-                                                              entry.value;
-                                                          String
-                                                              cardEntryUserName =
-                                                              cardEntry.key;
-                                                          String?
-                                                              cardEntryUserImageUrl =
-                                                              cardEntry.value[
-                                                                  'imageUrl'];
-                                                          String
-                                                              cardEntrySelectedCard =
-                                                              cardEntry.value[
-                                                                      'selectedCard'] ??
-                                                                  '';
-                                                          String
-                                                              previousSelectedCard =
-                                                              previousSelectedCards[
-                                                                      cardEntryUserName] ??
-                                                                  '';
-                                                          bool _changeColor =
-                                                              (cardEntrySelectedCard !=
-                                                                      '' &&
-                                                                  previousSelectedCard !=
-                                                                      cardEntrySelectedCard);
+                                                      Consumer<
+                                                          SelectedCardsModel>(
+                                                        builder: (context,
+                                                            selectedCardsModel,
+                                                            child) {
+                                                          String roomIDString =
+                                                              widget.roomID
+                                                                  .toString();
+                                                          List<Widget> widgets =
+                                                              [];
+                                                          for (var entry
+                                                              in selectedCardsModel
+                                                                  .selectedCards
+                                                                  .entries
+                                                                  .toList()
+                                                                  .asMap()
+                                                                  .entries) {
+                                                            MapEntry<
+                                                                    String,
+                                                                    Map<String,
+                                                                        String?>>
+                                                                cardEntry =
+                                                                entry.value;
+                                                            String
+                                                                cardEntryUserName =
+                                                                cardEntry.key;
+                                                            String?
+                                                                cardEntryUserImageUrl =
+                                                                cardEntry.value[
+                                                                    'imageUrl'];
+                                                            String
+                                                                cardEntrySelectedCard =
+                                                                cardEntry.value[
+                                                                        'selectedCard'] ??
+                                                                    '';
+                                                            String
+                                                                previousSelectedCard =
+                                                                previousSelectedCards[
+                                                                        cardEntryUserName] ??
+                                                                    '';
+                                                            bool _changeColor =
+                                                                (cardEntrySelectedCard !=
+                                                                        '' &&
+                                                                    previousSelectedCard !=
+                                                                        cardEntrySelectedCard);
 
-                                                          AnimationController
-                                                              _animationController =
-                                                              AnimationController(
-                                                            duration:
-                                                                const Duration(
-                                                                    milliseconds:
-                                                                        1000),
-                                                            vsync: this,
-                                                          );
+                                                            AnimationController
+                                                                _animationController =
+                                                                AnimationController(
+                                                              duration:
+                                                                  const Duration(
+                                                                      milliseconds:
+                                                                          1000),
+                                                              vsync: this,
+                                                            );
 
-                                                          final colorTween =
-                                                              TweenSequence([
-                                                            TweenSequenceItem(
-                                                              tween: ColorTween(
-                                                                  begin: Color(
-                                                                      0xFFFFFFFF),
-                                                                  end: Color(
-                                                                      0x804B39EF)),
-                                                              weight: 1,
-                                                            ),
-                                                            TweenSequenceItem(
-                                                              tween: ColorTween(
-                                                                  begin: Color(
-                                                                      0x804B39EF),
-                                                                  end: Color(
-                                                                      0xFFFFFFFF)),
-                                                              weight: 1,
-                                                            ),
-                                                          ]);
+                                                            final colorTween =
+                                                                TweenSequence([
+                                                              TweenSequenceItem(
+                                                                tween: ColorTween(
+                                                                    begin: Color(
+                                                                        0xFFFFFFFF),
+                                                                    end: Color(
+                                                                        0x804B39EF)),
+                                                                weight: 1,
+                                                              ),
+                                                              TweenSequenceItem(
+                                                                tween: ColorTween(
+                                                                    begin: Color(
+                                                                        0x804B39EF),
+                                                                    end: Color(
+                                                                        0xFFFFFFFF)),
+                                                                weight: 1,
+                                                              ),
+                                                            ]);
 
-                                                          final _colorAnimation =
-                                                              colorTween.animate(
-                                                                  _animationController);
+                                                            final _colorAnimation =
+                                                                colorTween.animate(
+                                                                    _animationController);
 
-                                                          _animationController
-                                                              .addStatusListener(
-                                                                  (status) {
-                                                            if (status ==
-                                                                AnimationStatus
-                                                                    .completed) {
-                                                              previousSelectedCards[
-                                                                      cardEntryUserName] =
-                                                                  cardEntrySelectedCard;
-                                                            }
-                                                          });
-
-                                                          if (_changeColor) {
                                                             _animationController
-                                                                .forward();
-                                                          }
+                                                                .addStatusListener(
+                                                                    (status) {
+                                                              if (status ==
+                                                                  AnimationStatus
+                                                                      .completed) {
+                                                                previousSelectedCards[
+                                                                        cardEntryUserName] =
+                                                                    cardEntrySelectedCard;
+                                                              }
+                                                            });
 
-                                                          Widget widget =
-                                                              Padding(
-                                                            padding:
-                                                                EdgeInsetsDirectional
-                                                                    .fromSTEB(
-                                                                        0,
-                                                                        0,
-                                                                        0,
-                                                                        1),
-                                                            child:
-                                                                AnimatedBuilder(
-                                                              animation:
-                                                                  _colorAnimation,
-                                                              builder: (context,
-                                                                  child) {
-                                                                return Container(
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: _colorAnimation
-                                                                        .value,
-                                                                    boxShadow: [
-                                                                      BoxShadow(
-                                                                        blurRadius:
-                                                                            0,
-                                                                        color: Color(
-                                                                            0xFFF1F4F8),
-                                                                        offset:
-                                                                            Offset(
+                                                            if (_changeColor) {
+                                                              _animationController
+                                                                  .forward();
+                                                            }
+
+                                                            Widget widget =
+                                                                Padding(
+                                                              padding:
+                                                                  EdgeInsetsDirectional
+                                                                      .fromSTEB(
                                                                           0,
-                                                                          1,
-                                                                        ),
-                                                                      )
-                                                                    ],
-                                                                  ),
-                                                                  child:
-                                                                      Padding(
-                                                                    padding: EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            16,
+                                                                          0,
+                                                                          0,
+                                                                          1),
+                                                              child:
+                                                                  AnimatedBuilder(
+                                                                animation:
+                                                                    _colorAnimation,
+                                                                builder:
+                                                                    (context,
+                                                                        child) {
+                                                                  return Container(
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: _colorAnimation
+                                                                          .value,
+                                                                      boxShadow: [
+                                                                        BoxShadow(
+                                                                          blurRadius:
+                                                                              0,
+                                                                          color:
+                                                                              Color(0xFFF1F4F8),
+                                                                          offset:
+                                                                              Offset(
                                                                             0,
-                                                                            16,
-                                                                            0),
-                                                                    child: Row(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .max,
-                                                                      children: [
-                                                                        Expanded(
-                                                                          flex:
-                                                                              playerNameAreaFlexValue,
-                                                                          child:
-                                                                              Padding(
-                                                                            padding: EdgeInsetsDirectional.fromSTEB(
-                                                                                0,
-                                                                                8,
-                                                                                12,
-                                                                                8),
+                                                                            1,
+                                                                          ),
+                                                                        )
+                                                                      ],
+                                                                    ),
+                                                                    child:
+                                                                        Padding(
+                                                                      padding: EdgeInsetsDirectional
+                                                                          .fromSTEB(
+                                                                              16,
+                                                                              0,
+                                                                              16,
+                                                                              0),
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.max,
+                                                                        children: [
+                                                                          Expanded(
+                                                                            flex:
+                                                                                playerNameAreaFlexValue,
+                                                                            child:
+                                                                                Padding(
+                                                                              padding: EdgeInsetsDirectional.fromSTEB(0, 8, 12, 8),
+                                                                              child: Row(
+                                                                                mainAxisSize: MainAxisSize.max,
+                                                                                children: [
+                                                                                  Padding(
+                                                                                    padding: EdgeInsetsDirectional.fromSTEB(0, 0, 8, 0),
+                                                                                    child: ClipRRect(
+                                                                                      borderRadius: BorderRadius.circular(40),
+                                                                                      child: cardEntryUserImageUrl != null
+                                                                                          ? CachedNetworkImage(
+                                                                                              fadeInDuration: Duration(milliseconds: 500),
+                                                                                              fadeOutDuration: Duration(milliseconds: 500),
+                                                                                              imageUrl: cardEntryUserImageUrl,
+                                                                                              width: 32,
+                                                                                              height: 32,
+                                                                                              fit: BoxFit.cover,
+                                                                                            )
+                                                                                          : Image.asset(
+                                                                                              'assets/images/default_face.png',
+                                                                                              width: 32,
+                                                                                              height: 32,
+                                                                                              fit: BoxFit.cover,
+                                                                                            ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  Expanded(
+                                                                                    child: Padding(
+                                                                                      padding: EdgeInsetsDirectional.fromSTEB(4, 0, 0, 0),
+                                                                                      child: Column(
+                                                                                        mainAxisSize: MainAxisSize.max,
+                                                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                        children: [
+                                                                                          Text(
+                                                                                            '${cardEntryUserName}',
+                                                                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                                                                  fontWeight: FontWeight.w700,
+                                                                                                ),
+                                                                                          ),
+                                                                                        ],
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          Expanded(
+                                                                            flex:
+                                                                                selectCardAreaFlexValue,
+                                                                            child:
+                                                                                LayoutBuilder(
+                                                                              builder: (BuildContext context, BoxConstraints constraints) {
+                                                                                return Padding(
+                                                                                  padding: EdgeInsets.symmetric(horizontal: (constraints.maxWidth - 48) / 2),
+                                                                                  child: Container(
+                                                                                    color: (!Provider.of<IsResultVisibleModel>(context, listen: true).resultVisible && cardEntrySelectedCard != '' && cardEntryUserName != prefsUserName) ? Color(0xFFF1F4F8) : null,
+                                                                                    child: Text(
+                                                                                      (!Provider.of<IsResultVisibleModel>(context, listen: true).resultVisible && cardEntrySelectedCard != '' && cardEntryUserName != prefsUserName) ? '' : '${cardEntrySelectedCard}',
+                                                                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                                                                            fontFamily: "Outfit",
+                                                                                          ),
+                                                                                      textAlign: TextAlign.center,
+                                                                                    ),
+                                                                                  ),
+                                                                                );
+                                                                              },
+                                                                            ),
+                                                                          ),
+                                                                          Expanded(
+                                                                            flex:
+                                                                                playerStatusAreaFlexValue,
                                                                             child:
                                                                                 Row(
                                                                               mainAxisSize: MainAxisSize.max,
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
                                                                               children: [
-                                                                                Padding(
-                                                                                  padding: EdgeInsetsDirectional.fromSTEB(0, 0, 8, 0),
-                                                                                  child: ClipRRect(
-                                                                                    borderRadius: BorderRadius.circular(40),
-                                                                                    child: cardEntryUserImageUrl != null
-                                                                                        ? CachedNetworkImage(
-                                                                                            fadeInDuration: Duration(milliseconds: 500),
-                                                                                            fadeOutDuration: Duration(milliseconds: 500),
-                                                                                            imageUrl: cardEntryUserImageUrl,
-                                                                                            width: 32,
-                                                                                            height: 32,
-                                                                                            fit: BoxFit.cover,
+                                                                                screenWidth <= SMART_PHONE_SMALL_SCREEN_WIDTH
+                                                                                    ? cardEntrySelectedCard.isEmpty
+                                                                                        ? Icon(
+                                                                                            Icons.check_box_outline_blank,
+                                                                                            color: Color(0xFFF1F4F8),
+                                                                                            size: 24,
                                                                                           )
-                                                                                        : Image.asset(
-                                                                                            'assets/images/default_face.png',
-                                                                                            width: 32,
-                                                                                            height: 32,
-                                                                                            fit: BoxFit.cover,
+                                                                                        : Icon(
+                                                                                            Icons.check_box,
+                                                                                            color: Color(0xFF39D2C0),
+                                                                                            size: 24,
+                                                                                          )
+                                                                                    : Container(
+                                                                                        height: 32,
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: cardEntrySelectedCard.isEmpty ? Color(0xFFF1F4F8) : Color(0x4D39D2C0),
+                                                                                          borderRadius: BorderRadius.circular(40),
+                                                                                          border: Border.all(
+                                                                                            color: cardEntrySelectedCard.isEmpty ? Color(0x00000000) : Color(0xFF39D2C0),
                                                                                           ),
-                                                                                  ),
-                                                                                ),
-                                                                                Expanded(
-                                                                                  child: Padding(
-                                                                                    padding: EdgeInsetsDirectional.fromSTEB(4, 0, 0, 0),
-                                                                                    child: Column(
-                                                                                      mainAxisSize: MainAxisSize.max,
-                                                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                      children: [
-                                                                                        Text(
-                                                                                          '${cardEntryUserName}',
-                                                                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                                                                fontWeight: FontWeight.w700,
-                                                                                              ),
                                                                                         ),
-                                                                                      ],
-                                                                                    ),
+                                                                                        alignment: AlignmentDirectional(0, 0),
+                                                                                        child: Padding(
+                                                                                          padding: screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH ? EdgeInsetsDirectional.fromSTEB(8, 0, 8, 0) : EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
+                                                                                          child: Text(cardEntrySelectedCard.isEmpty ? '未選択' : '選択済', style: Theme.of(context).textTheme.bodyMedium),
+                                                                                        ),
+                                                                                      ),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                          Expanded(
+                                                                            flex:
+                                                                                playerActionAreaFlexValue,
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisSize: MainAxisSize.max,
+                                                                              mainAxisAlignment: MainAxisAlignment.end,
+                                                                              children: [
+                                                                                PopupMenuButton(
+                                                                                  offset: Offset(0, 40),
+                                                                                  icon: Icon(
+                                                                                    Icons.more_vert,
+                                                                                    color: Color(0xFF57636C),
+                                                                                    size: playerActionIconSize,
                                                                                   ),
+                                                                                  itemBuilder: (BuildContext context) {
+                                                                                    List<PopupMenuEntry> menuItems = [
+                                                                                      PopupMenuItem(
+                                                                                        value: 'exit',
+                                                                                        child: Text(cardEntryUserName == prefsUserName ? '退室する' : '退室させる', style: Theme.of(context).textTheme.labelMedium),
+                                                                                      ),
+                                                                                    ];
+                                                                                    if (cardEntryUserName != prefsUserName) {
+                                                                                      menuItems.add(
+                                                                                        PopupMenuItem(
+                                                                                          value: 'block',
+                                                                                          child: Text('入室をブロックする', style: Theme.of(context).textTheme.labelMedium),
+                                                                                        ),
+                                                                                      );
+                                                                                      // iOSの場合のみ表示
+                                                                                      if (Theme.of(context).platform == TargetPlatform.iOS) {
+                                                                                        menuItems.add(
+                                                                                          PopupMenuItem(
+                                                                                            value: 'report',
+                                                                                            child: Text('違反を報告する', style: Theme.of(context).textTheme.labelMedium),
+                                                                                          ),
+                                                                                        );
+                                                                                      }
+                                                                                    }
+
+                                                                                    return menuItems;
+                                                                                  },
+                                                                                  onSelected: (value) {
+                                                                                    if (value == 'exit') {
+                                                                                      exitRoom(cardEntryUserName, prefsUserName, false);
+                                                                                    } else if (value == 'report') {
+                                                                                      showModalBottomSheet(
+                                                                                        context: context,
+                                                                                        builder: (BuildContext context) {
+                                                                                          return ReportUserBottomSheet(
+                                                                                            roomID: roomIDString,
+                                                                                            onReportSuccess: () => showReportCompleteMessage(),
+                                                                                          );
+                                                                                        },
+                                                                                      );
+                                                                                    } else if (value == 'block') {
+                                                                                      exitRoom(cardEntryUserName, prefsUserName, true);
+                                                                                    }
+                                                                                  },
                                                                                 ),
                                                                               ],
                                                                             ),
                                                                           ),
-                                                                        ),
-                                                                        Expanded(
-                                                                          flex:
-                                                                              selectCardAreaFlexValue,
-                                                                          child:
-                                                                              LayoutBuilder(
-                                                                            builder:
-                                                                                (BuildContext context, BoxConstraints constraints) {
-                                                                              return Padding(
-                                                                                padding: EdgeInsets.symmetric(horizontal: (constraints.maxWidth - 48) / 2),
-                                                                                child: Container(
-                                                                                  color: (!Provider.of<IsResultVisibleModel>(context, listen: true).resultVisible && cardEntrySelectedCard != '' && cardEntryUserName != prefsUserName) ? Color(0xFFF1F4F8) : null,
-                                                                                  child: Text(
-                                                                                    (!Provider.of<IsResultVisibleModel>(context, listen: true).resultVisible && cardEntrySelectedCard != '' && cardEntryUserName != prefsUserName) ? '' : '${cardEntrySelectedCard}',
-                                                                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                                                                          fontFamily: "Outfit",
-                                                                                        ),
-                                                                                    textAlign: TextAlign.center,
-                                                                                  ),
-                                                                                ),
-                                                                              );
-                                                                            },
-                                                                          ),
-                                                                        ),
-                                                                        Expanded(
-                                                                          flex:
-                                                                              playerStatusAreaFlexValue,
-                                                                          child:
-                                                                              Row(
-                                                                            mainAxisSize:
-                                                                                MainAxisSize.max,
-                                                                            mainAxisAlignment:
-                                                                                MainAxisAlignment.center,
-                                                                            children: [
-                                                                              screenWidth <= SMART_PHONE_SMALL_SCREEN_WIDTH
-                                                                                  ? cardEntrySelectedCard.isEmpty
-                                                                                      ? Icon(
-                                                                                          Icons.check_box_outline_blank,
-                                                                                          color: Color(0xFFF1F4F8),
-                                                                                          size: 24,
-                                                                                        )
-                                                                                      : Icon(
-                                                                                          Icons.check_box,
-                                                                                          color: Color(0xFF39D2C0),
-                                                                                          size: 24,
-                                                                                        )
-                                                                                  : Container(
-                                                                                      height: 32,
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: cardEntrySelectedCard.isEmpty ? Color(0xFFF1F4F8) : Color(0x4D39D2C0),
-                                                                                        borderRadius: BorderRadius.circular(40),
-                                                                                        border: Border.all(
-                                                                                          color: cardEntrySelectedCard.isEmpty ? Color(0x00000000) : Color(0xFF39D2C0),
-                                                                                        ),
-                                                                                      ),
-                                                                                      alignment: AlignmentDirectional(0, 0),
-                                                                                      child: Padding(
-                                                                                        padding: screenWidth <= ThemeProvider.SMART_PHONE_STANDARD_SCREEN_WIDTH ? EdgeInsetsDirectional.fromSTEB(8, 0, 8, 0) : EdgeInsetsDirectional.fromSTEB(12, 0, 12, 0),
-                                                                                        child: Text(cardEntrySelectedCard.isEmpty ? '未選択' : '選択済', style: Theme.of(context).textTheme.bodyMedium),
-                                                                                      ),
-                                                                                    ),
-                                                                            ],
-                                                                          ),
-                                                                        ),
-                                                                        Expanded(
-                                                                          flex:
-                                                                              playerActionAreaFlexValue,
-                                                                          child:
-                                                                              Row(
-                                                                            mainAxisSize:
-                                                                                MainAxisSize.max,
-                                                                            mainAxisAlignment:
-                                                                                MainAxisAlignment.end,
-                                                                            children: [
-                                                                              PopupMenuButton(
-                                                                                offset: Offset(0, 40),
-                                                                                icon: Icon(
-                                                                                  Icons.more_vert,
-                                                                                  color: Color(0xFF57636C),
-                                                                                  size: playerActionIconSize,
-                                                                                ),
-                                                                                itemBuilder: (BuildContext context) {
-                                                                                  List<PopupMenuEntry> menuItems = [
-                                                                                    PopupMenuItem(
-                                                                                      value: 'exit',
-                                                                                      child: Text(cardEntryUserName == prefsUserName ? '退室する' : '退室させる', style: Theme.of(context).textTheme.labelMedium),
-                                                                                    ),
-                                                                                  ];
-                                                                                  if (cardEntryUserName != prefsUserName) {
-                                                                                    menuItems.add(
-                                                                                      PopupMenuItem(
-                                                                                        value: 'block',
-                                                                                        child: Text('入室をブロックする', style: Theme.of(context).textTheme.labelMedium),
-                                                                                      ),
-                                                                                    );
-                                                                                    // iOSの場合のみ表示
-                                                                                    if (Theme.of(context).platform == TargetPlatform.iOS) {
-                                                                                      menuItems.add(
-                                                                                        PopupMenuItem(
-                                                                                          value: 'report',
-                                                                                          child: Text('違反を報告する', style: Theme.of(context).textTheme.labelMedium),
-                                                                                        ),
-                                                                                      );
-                                                                                    }
-                                                                                  }
-
-                                                                                  return menuItems;
-                                                                                },
-                                                                                onSelected: (value) {
-                                                                                  if (value == 'exit') {
-                                                                                    exitRoom(cardEntryUserName, prefsUserName, false);
-                                                                                  } else if (value == 'report') {
-                                                                                    showModalBottomSheet(
-                                                                                      context: context,
-                                                                                      builder: (BuildContext context) {
-                                                                                        return ReportUserBottomSheet(
-                                                                                          roomID: roomIDString,
-                                                                                          onReportSuccess: () => showReportCompleteMessage(),
-                                                                                        );
-                                                                                      },
-                                                                                    );
-                                                                                  } else if (value == 'block') {
-                                                                                    exitRoom(cardEntryUserName, prefsUserName, true);
-                                                                                  }
-                                                                                },
-                                                                              ),
-                                                                            ],
-                                                                          ),
-                                                                        ),
-                                                                      ],
+                                                                        ],
+                                                                      ),
                                                                     ),
-                                                                  ),
-                                                                );
-                                                              },
-                                                            ),
-                                                          );
+                                                                  );
+                                                                },
+                                                              ),
+                                                            );
 
-                                                          widgets.add(widget);
-                                                        }
-                                                        return ListView(
-                                                          padding:
-                                                              EdgeInsets.zero,
-                                                          shrinkWrap: true,
-                                                          scrollDirection:
-                                                              Axis.vertical,
-                                                          children: widgets,
-                                                        );
-                                                      },
-                                                    )
-                                                  ],
+                                                            widgets.add(widget);
+                                                          }
+                                                          return ListView(
+                                                            padding:
+                                                                EdgeInsets.zero,
+                                                            shrinkWrap: true,
+                                                            scrollDirection:
+                                                                Axis.vertical,
+                                                            children: widgets,
+                                                          );
+                                                        },
+                                                      )
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        if (marginAreaWidth > 0 &&
-                                            marginLeftPlus <= 0)
-                                          Container(
-                                            width: marginAreaWidth,
-                                          ),
-                                      ],
+                                          if (marginAreaWidth > 0 &&
+                                              marginLeftPlus <= 0)
+                                            Container(
+                                              width: marginAreaWidth,
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                  ),
-                                ],
+                                    Row(
+                                      mainAxisSize: MainAxisSize.max,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
+                  );
+                }
               }
             } else {
               return Scaffold(
@@ -2076,7 +2284,6 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
             }
           }
         });
-    // });
   }
 
   void initState() {
@@ -2087,6 +2294,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
       loadUserImage(),
       checkPrefsUserImage(),
       checkBlockUser(widget.roomID.toString()),
+      getDoNotShowAgainPreference(),
     ]);
 
     cardNumbers = generateFibonacciNumbers(89); // ここでカード群を生成します
@@ -2169,9 +2377,6 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
 
   Future<String> checkUserName(bool checkUserExistsInUsers) async {
     final prefsUserName = await getUserName(checkUserExistsInUsers);
-    if (prefsUserName.isEmpty) {
-      navigateToNameInputScreen();
-    }
 
     return prefsUserName;
   }
@@ -2211,7 +2416,21 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
         .collection('users');
     final userDoc =
         await userCollection.where('userName', isEqualTo: userName).get();
-    return userDoc.docs.isNotEmpty;
+    //return userDoc.docs.isNotEmpty;
+
+    if (userDoc.docs.isNotEmpty) {
+      final userData = userDoc.docs.first.data();
+      // justLoggedInがtrueの場合のみ、updateLastActivityDateTime関数を呼び出し、justLoggedInをfalseに更新する。
+      if (userData['justLoggedIn'] == true) {
+        await userCollection.doc(userDoc.docs.first.id).update({
+          'justLoggedIn': false,
+        });
+        updateLastActivityDateTime();
+      }
+      return true;
+    } else {
+      return false;
+    }
   }
 
   // exitsコレクションにユーザー名が存在するか確認する関数
@@ -2366,12 +2585,40 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
 
   // 何かアクティビティがあるたびに呼び出す
   Future<void> updateLastActivityDateTime() async {
-    await _firestore.collection('rooms').doc(widget.roomID.toString()).update({
-      'lastActivityDateTime': FieldValue.serverTimestamp(),
-    });
+    DateTime inactivityReleaseTime =
+        DateTime.now().subtract(Duration(minutes: INACTIVITY_RELEASE_MINUTES));
+    final roomDoc = await _firestore
+        .collection('rooms')
+        .doc(widget.roomID.toString())
+        .get();
+    DateTime lastActivityDateTime = roomDoc['lastActivityDateTime'].toDate();
+
+    // 最終アクティビティがINACTIVITY_RELEASE_MINUTES分前よりも前の場合、lastActivityDateTimeは更新しない
+    if (lastActivityDateTime.isBefore(inactivityReleaseTime)) {
+    } else {
+      await _firestore
+          .collection('rooms')
+          .doc(widget.roomID.toString())
+          .update({
+        'lastActivityDateTime': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> exitRoom(String exitedUser, String exiter, bool blocked) async {
+    var userDocs = await _firestore
+        .collection('rooms')
+        .doc(widget.roomID.toString())
+        .collection('users')
+        .where('userName', isEqualTo: exitedUser)
+        .get();
+
+    // userUniqueIDを取得
+    String userUniqueID = '';
+    if (userDocs.docs.isNotEmpty) {
+      userUniqueID = userDocs.docs.first.data()['userUniqueID'] ?? '';
+    }
+
     // 退室させられた人と退室させた人の情報をFirestoreに保存
     var exitDocs = await _firestore
         .collection('rooms')
@@ -2388,6 +2635,7 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
           .update({
         'exiter': exiter,
         'blocked': blocked,
+        'userUniqueID': userUniqueID,
       });
     } else {
       await _firestore
@@ -2398,16 +2646,11 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
         'userName': exitedUser,
         'exiter': exiter,
         'blocked': blocked,
+        'userUniqueID': userUniqueID,
       });
     }
 
-    // 退室させられた人の情報を削除
-    var userDocs = await _firestore
-        .collection('rooms')
-        .doc(widget.roomID.toString())
-        .collection('users')
-        .where('userName', isEqualTo: exitedUser)
-        .get();
+    // 退室させられた人の情報をusersコレクションから削除
     for (var doc in userDocs.docs) {
       await _firestore
           .collection('rooms')
@@ -2481,7 +2724,6 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
 
   // 違反を報告した後の完了メッセージを表示する関数
   void showReportCompleteMessage() {
-    print('showReportCompleteMessage');
     showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -2492,7 +2734,6 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
               children: <Widget>[
                 Text(
                   '違反を報告しました。',
-                  // style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -2523,16 +2764,17 @@ class _RoomScreenState extends State<RoomScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> saveForUserBlockString() async {
-    var roomSnapshot = await _firestore
-        .collection('rooms')
-        .doc(widget.roomID.toString())
-        .get();
-
-    String forUserBlockString =
-        roomSnapshot.data()?['forUserBlockString'] ?? '';
-
+  // しばらく表示しない設定を保存する関数
+  Future<void> _saveDoNotShowAgainPreference() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('forUserBlockString', forUserBlockString);
+    await prefs.setBool('doNotShowAgain', true);
+  }
+
+  // しばらく表示しない設定を取得する関数
+  Future<bool> getDoNotShowAgainPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool doNotShowAgain = prefs.getBool('doNotShowAgain') ?? false;
+
+    return doNotShowAgain;
   }
 }

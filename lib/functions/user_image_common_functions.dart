@@ -34,17 +34,6 @@ Future<String?> uploadImageAndSaveUrl(
   }
 }
 
-// ランダムな数字を生成します
-// String generateRandomNumberString(int length) {
-//   var rand = new Random();
-//   var codeUnits = List.generate(
-//     length,
-//     (index) => rand.nextInt(10), // 0から9までのランダムな数字を生成
-//   );
-
-//   return codeUnits.join();
-// }
-
 // SharedPreferencesに_imageDataを保存します
 Future<void> saveUserImage(Uint8List? imageData) async {
   if (imageData == null) {
