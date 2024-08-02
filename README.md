@@ -78,7 +78,6 @@ planning_poker_app/ios/Runner/
 Firebaseのウェブアプリ登録後、Firebaseのウェブアプリの情報表示画面にある「SDKの設定と構成」の欄に記載の手順を実行する
 
 
-
 ### 3. Firebaseとの接続設定
 
 planning_poker_app/lib/main.dart
@@ -323,6 +322,22 @@ XcodeよりアプリのバンドルIDの設定や、署名設定（Signing & Cap
 「6. Androidアプリの設定とデプロイ」の「アプリアイコンおよびランチャーアイコンの作成」を実施済みであれば不要
 
 #### ビルドとデプロイ
+
+1. プロジェクトルート直下にて、
+
+```
+flutter build ios --release
+```
+
+コマンドを実行する
+
+2. Xcodeにてアーカイブ処理を行う
+  
+XcodeのメニューからProduct -> Archiveを選択する。これにより、アーカイブプロセスが開始され、成功すると、Organizerウィンドウが表示される。
+
+3. Xcodeからストアにアップロードする
+
+### 7. Appleアプリの設定とデプロイ
 
 1. プロジェクトルート直下にて、
 
